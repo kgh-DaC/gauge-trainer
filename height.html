@@ -6,23 +6,22 @@
 <title>하이트게이지 눈금읽기</title>
 <style>
   :root { --bg:#fff; --fg:#1f2328; --muted:#656d76; --line:#d0d7de; --accent:#0969da; --ok:#1a7f37; --panel:#fafbfc;
-          /* 금속 그라데이션 색: sc=본척 눈금면(무광 크롬), m=슬라이더·기둥 몸체(크롬강), vn=부척판, b=베이스(주철), p=정반(석정반) */
-          --sc0:#d6dce2; --sc1:#f2f4f6; --m0:#7b848e; --m1:#f6f8fa; --m2:#c4cbd2; --m3:#98a1aa;
-          --vn0:#f1f4f7; --vn1:#d6dde5; --b0:#5c646d; --b1:#9ca4ac; --b2:#3b4148; --p0:#a3a9af; --p1:#767c82;
+          /* 금속 그라데이션 색: sc=본척 눈금면(무광 크롬), m=슬라이더·기둥 몸체(새틴 크롬), vn=부척판, b=베이스(은회색 주물), p=정반(석정반) */
+          --sc0:#d3d9df; --sc1:#f4f6f8; --m0:#7d868f; --m1:#f6f8fa; --m2:#c9cfd5; --m3:#9ba3ab;
+          --vn0:#f1f4f7; --vn1:#d6dde5; --b0:#bcc2c8; --b1:#eceff1; --b2:#8e959c; --p0:#a3a9af; --p1:#767c82;
           --shine:rgba(255,255,255,0.75); --shade:rgba(0,0,0,0.35); --inv:#f3f5f7; }
   @media (prefers-color-scheme: dark) { :root { --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --line:#30363d; --accent:#4493f8; --ok:#3fb950; --panel:#11161d;
           --sc0:#252b33; --sc1:#353d47; --m0:#13171c; --m1:#6b7682; --m2:#3e4752; --m3:#272e36;
-          --vn0:#3b4451; --vn1:#2a313b; --b0:#2b3138; --b1:#4f5863; --b2:#16191d; --p0:#3b4046; --p1:#23272c;
+          --vn0:#3b4451; --vn1:#2a313b; --b0:#3a4148; --b1:#5d6670; --b2:#1d2126; --p0:#3b4046; --p1:#23272c;
           --shine:rgba(255,255,255,0.22); --shade:rgba(0,0,0,0.55); --inv:#d7dde3; } }
   body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, "Malgun Gothic", sans-serif; }
-  .gw-svg { width:100%; height:auto; max-width:900px; max-height:max(340px, calc(100vh - 230px)); touch-action:none; user-select:none; -webkit-user-select:none; display:block; outline:none; }
+  .gw-svg { width:100%; height:auto; max-width:900px; max-height:max(340px, calc(100vh - 200px)); touch-action:none; user-select:none; -webkit-user-select:none; display:block; outline:none; }
   .gw-svg:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
   .gw-bar { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; align-items:center; }
   .gw-help { color:var(--muted); font-size:0.9em; margin:4px 0 8px; }
   .gw-tag { color:var(--muted); font-size:0.9em; }
-  /* 좁은 배치(휴대폰 세로): 그림이 세로로 길어지므로 높이 제한을 완화 */
-  .gw-narrow .gw-svg { max-height:max(420px, calc(100vh - 150px)); }
-  /* 좁은 화면(휴대폰): 첫 화면에 정답확인 버튼이 들어오도록 위쪽 여백·안내문을 줄인다 */
+  /* 좁은 배치(휴대폰 세로): 높이 제한을 완화 */
+  .gw-narrow .gw-svg { max-height:max(360px, calc(100vh - 150px)); }
   @media (max-width:520px) {
     body { padding:8px; font-size:15px; }
     h2.gw-title { font-size:1.15em; }
@@ -32,21 +31,22 @@
   }
   button { font:inherit; padding:8px 14px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--fg); cursor:pointer; }
   button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
-  button.seg[aria-pressed="true"] { border-color:var(--accent); color:var(--accent); font-weight:700; }
   .gw-answer { display:none; padding:12px; border:1px solid var(--ok); border-radius:8px; }
   .gw-answer.open { display:block; }
   .gw-value { font-size:1.6em; font-weight:700; color:var(--ok); }
   .gw-note { color:var(--muted); font-size:0.9em; }
   /* SVG 요소 */
   .h-panel { fill:var(--panel); stroke:var(--line); }
-  /* 금속 부품: fill은 그라데이션 속성(fill="url(#height-…)")으로 준다. 여기서는 테두리만. */
   .h-mtl { stroke:var(--shade); stroke-width:0.8; }
   .h-vplate { stroke:var(--accent); stroke-width:1; }
   .h-shine { stroke:var(--shine); stroke-width:1; fill:none; }
   .h-shade { stroke:var(--shade); stroke-width:1; fill:none; }
+  .h-shadefill { fill:var(--shade); fill-opacity:0.25; stroke:none; }
   .h-knurl { stroke:var(--shade); stroke-width:0.7; }
   .h-rod { stroke:var(--m3); stroke-width:2.2; }
   .h-slot { stroke:var(--shade); stroke-width:1.2; }
+  .h-brush { stroke:var(--shine); stroke-width:0.5; opacity:0.55; }
+  .h-grain { fill:var(--shade); fill-opacity:0.18; }
   .h-scr-edge { stroke:var(--accent); stroke-width:1.4; }
   .h-lbl { fill:var(--muted); font-family:system-ui, "Malgun Gothic", sans-serif; }
   .h-lbl-inv { fill:var(--inv); font-family:system-ui, "Malgun Gothic", sans-serif; }
@@ -54,12 +54,14 @@
   .h-vtick { stroke:var(--fg); stroke-width:1.2; }
   .h-hl { stroke:var(--ok); stroke-width:2.6; }
   .h-thin { stroke-width:0.8; }
-  .h-hl.h-thin { stroke-width:1.4; }
-  .h-scr { stroke:var(--accent); stroke-width:1.5; }
   .h-txt { fill:var(--fg); font-family:system-ui, "Malgun Gothic", sans-serif; }
   .h-cap { fill:var(--muted); font-size:13px; font-family:system-ui, "Malgun Gothic", sans-serif; }
   .h-ind { fill:var(--accent); fill-opacity:0.08; stroke:var(--accent); stroke-dasharray:4 3; }
   .h-iface { stroke:var(--accent); stroke-width:1; stroke-opacity:0.5; }
+  /* 학교 명판(로고 + 문구): 다크 모드에서도 흰 명판 그대로(로고 jpg 배경이 흰색) */
+  .h-plate { fill:#fff; stroke:#aab2ba; stroke-width:0.8; }
+  .h-plt { fill:#1f2328; font-family:system-ui, "Malgun Gothic", sans-serif; }
+  .h-plt-b { fill:#0b3d91; font-weight:700; font-family:system-ui, "Malgun Gothic", sans-serif; }
 </style>
 </head>
 <body>
@@ -68,13 +70,15 @@
 (function () {
   const ID = 'height';
   const TITLE = '하이트게이지';
+  // 학교 로고(312×312 jpg, 위쪽 0~175px가 엠블럼). 빌드 스크립트가 data URI를 주입한다.
+  const LOGO_URI = 'data:image/jpeg;base64,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';
+  const SCHOOL_LINES = ['한국폴리텍대학', '광주캠퍼스', '기계시스템과'];
 
   // ---- 상태: 1/100mm 정수 ----
   // 부척은 1/50형(0.02mm) 고정: 본척 49mm를 50등분, 부척 한 칸 0.98mm
   const STATE_MIN = 0, STATE_MAX = 30000;
   const resU = 2, N = 50, pitchU = 98, LEN = 49, labelEvery = 5;
   let state = 0;          // y: 부척 0점(스크라이버 아래 날) 높이
-  let loupeOffU = 200;    // 돋보기 창 중심 = y + loupeOffU (정답과 무관한 고정 기본값)
   let revealed = false;
 
   // ---- 명세 함수: 상태 → 정답 (정수 계산, 표시 단계에서만 소수) ----
@@ -116,54 +120,48 @@
   }
 
   // ---- 전체 그림 내부 좌표(실물형 하이트게이지, 가로 0~240 / 세로 0~590) ----
-  // 기둥 꼭대기를 372mm까지 그려, y = 300mm에서도 슬라이더·미세이송 블록이 기둥 위에 걸쳐 있게 한다.
-  const OV_X0 = 12, OV_X1 = 236, OV_YB = 566, OV_YT = 32, OV_MAXMM = 372;
-  const CX0 = 70, CX1 = 88;            // 기둥(본척) 좌우
-  const BX0 = 36, BX1 = 160, BH = 30;  // 베이스 좌우·높이
-  const SL = CX0 - 6, SR = CX1 + 30;   // 슬라이더 몸체 좌우
+  // 참조 사진처럼 기둥은 베이스 왼쪽 뒤에 서 있고, 스크라이버는 왼쪽으로, 클램프 노브는 오른쪽으로 나온다.
+  const OV_X0 = 6, OV_X1 = 236, OV_YB = 566, OV_YT = 32, OV_MAXMM = 372;
+  const CX0 = 104, CX1 = 128;          // 기둥(본척) 좌우
+  const BX0 = 94, BX1 = 232, BH = 46;  // 베이스 좌우·높이
+  const SL = CX0 - 6, SR = CX1 + 22;   // 슬라이더 몸체 좌우
   const kO = (OV_YB - OV_YT) / OV_MAXMM;               // px/mm (전체 그림 내부 좌표)
 
-  // ---- 화면 배치 2가지 ----
-  // 넓은 화면: 전체 | 확대 창 | 돋보기를 한 줄로 (viewBox 800×600)
-  // 좁은 화면(컨테이너 폭 < 640px, 휴대폰 세로): 위쪽에 전체(축소, 보조) + 확대 창, 아래쪽에 돋보기를 가로 전체 폭으로 (viewBox 400×620)
-  const NARROW_BELOW = 640;
+  // 확대 창이 보여 주는 구간: 부척 0점 아래 2.5mm ~ 위 51.5mm (LEN + 5 mm)
+  const MAG_BELOW = 250, MAG_SPAN = LEN + 5;
+
+  // ---- 화면 배치 2가지: 전체 + 확대 창 ----
+  // 넓은 화면: 전체 | 확대 창 (viewBox 660×600)
+  // 좁은 화면(컨테이너 폭 < 560px): 전체(축소) | 확대 창 (viewBox 400×430)
+  const NARROW_BELOW = 560;
   const LAYOUTS = {
-    wide: { narrow: false, vbW: 800, vbH: 600,
+    wide: { narrow: false, vbW: 660, vbH: 600,
       ov: { tx: 0, ty: 0, s: 1, F: 1 },
-      mag: { x: 246, w: 346, top: 26, bot: 586, ix: 420, vW: 92, mL: [14, 24, 36], vL: [18, 32], font: 14, bevel: 10, capY: 16,
-             cap: '확대 창 (본척 숫자 단위 cm, 1칸 = 1mm)' },
-      lp: { x: 602, w: 190, top: 26, bot: 586, ix: 690, mL: [26, 40, 56], vL: [30, 48], font: 15, capY: 16 },
-      help: '왼쪽 전체 그림이나 가운데 확대 창을 위아래로 끌어 슬라이더를 움직이세요(확대 창은 미세 조정). ' +
-            '오른쪽 돋보기 창을 위아래로 끌면 확대 창의 점선 상자(돋보기 구간)가 부척을 따라 움직입니다. 키보드: ↑↓, PageUp/PageDown.' },
-    narrow: { narrow: true, vbW: 400, vbH: 620,
-      ov: { tx: 0, ty: 6, s: 0.56, F: 1.75 },
-      mag: { x: 140, w: 256, top: 26, bot: 334, ix: 236, vW: 78, mL: [10, 17, 26], vL: [14, 24], font: 13, bevel: 6, capY: 16,
-             cap: '확대 창 (숫자 cm)' },
-      lp: { x: 4, w: 392, top: 366, bot: 614, ix: 200, mL: [26, 40, 56], vL: [30, 48], font: 15, capY: 356 },
-      help: '왼쪽 전체 그림이나 오른쪽 확대 창을 위아래로 끌어 슬라이더를 움직이세요. ' +
-            '아래 돋보기 창을 끌면 확대 창의 점선 상자(돋보기 구간)가 움직입니다.' }
+      mag: { x: 250, w: 404, top: 26, bot: 586, ix: 390, vW: 96, mL: [14, 24, 36], vL: [18, 32], font: 14, bevel: 10, capY: 16,
+             cap: '확대 창 (본척 숫자 단위 cm, 1칸 = 1mm)', np: { w: 118, em: 54, font: 11 } },
+      npOv: { cx: 202, top: 62, w: 66, em: 46, font: 8.5, text: true },
+      help: '왼쪽 전체 그림을 위아래로 끌면 크게, 오른쪽 확대 창을 끌면 미세하게 슬라이더가 움직입니다. ' +
+            '키보드: ↑↓(0.02mm), PageUp/PageDown(1mm).' },
+    narrow: { narrow: true, vbW: 400, vbH: 430,
+      ov: { tx: 0, ty: 18, s: 0.66, F: 1.6 },
+      mag: { x: 164, w: 232, top: 26, bot: 422, ix: 248, vW: 66, mL: [10, 17, 26], vL: [14, 24], font: 13, bevel: 6, capY: 16,
+             cap: '확대 창 (숫자 cm)', np: { w: 74, em: 40, font: 8 } },
+      npOv: { cx: 202, top: 62, w: 66, em: 54, font: 0, text: false },
+      help: '왼쪽 전체 그림(크게) 또는 오른쪽 확대 창(미세)을 위아래로 끌어 슬라이더를 움직이세요.' }
   };
   let L = LAYOUTS.wide;
   let forcedNarrow = null;   // 검증용: null이면 컨테이너 폭으로 자동 결정
 
-  // 돋보기: 기본 120px/mm(0.02mm = 2.4px), ×2 선택 시 240px/mm. 선 굵기 0.8px
-  const KL_BASE = 120;
-  let kL = KL_BASE;
-  const LOUPE_DEFAULT = 200;
+  function kM() { return (L.mag.bot - L.mag.top) / MAG_SPAN; }
 
-  function kM() { return (L.mag.bot - L.mag.top) / (LEN + 10); }
-
-  let root, svg, ans, help;
+  let root, svg, dyn, ans, help;
   function mount(el) {
     root = el;
     el.innerHTML =
       '<h2 class="gw-title" style="margin:0 0 4px">' + TITLE + '</h2>' +
-      '<div class="gw-bar" style="margin:4px 0"><span class="gw-tag">부척 1/50 (0.02mm)</span>' +
-      '<span style="margin-left:4px">돋보기:</span>' +
-      '<button class="seg" id="' + ID + '-z1" aria-pressed="true">×1</button>' +
-      '<button class="seg" id="' + ID + '-z2" aria-pressed="false">×2</button></div>' +
+      '<div class="gw-bar" style="margin:4px 0"><span class="gw-tag">부척 1/50 (0.02mm)</span></div>' +
       '<div class="gw-help" id="' + ID + '-help"></div>' +
-      '<svg class="gw-svg" id="' + ID + '-svg" viewBox="0 0 800 600" tabindex="0" role="img" aria-label="하이트게이지 눈금"></svg>' +
+      '<svg class="gw-svg" id="' + ID + '-svg" viewBox="0 0 660 600" tabindex="0" role="img" aria-label="하이트게이지 눈금"></svg>' +
       '<div class="gw-bar"><button class="primary" id="' + ID + '-reveal">정답확인</button>' +
       '<button id="' + ID + '-new">새 문제</button></div>' +
       '<div class="gw-answer" id="' + ID + '-ans" aria-live="polite"></div>';
@@ -172,15 +170,6 @@
     help = el.querySelector('#' + ID + '-help');
     el.querySelector('#' + ID + '-reveal').onclick = reveal;
     el.querySelector('#' + ID + '-new').onclick = newProblem;
-    const z1 = el.querySelector('#' + ID + '-z1'), z2 = el.querySelector('#' + ID + '-z2');
-    function setZoom(z) {
-      kL = KL_BASE * z;
-      z1.setAttribute('aria-pressed', z === 1);
-      z2.setAttribute('aria-pressed', z === 2);
-      draw();
-    }
-    z1.onclick = function () { setZoom(1); };
-    z2.onclick = function () { setZoom(2); };
     bindDrag(svg);
     applyLayout(true);
     // 컨테이너 폭이 바뀌면(회전, 노션 임베드 크기 변경, 탭 전환) 배치를 다시 고른다
@@ -192,13 +181,14 @@
   function applyLayout(force) {
     if (!root) return;
     const w = root.clientWidth;
-    let narrow = forcedNarrow !== null ? forcedNarrow : (w > 0 ? w < NARROW_BELOW : L.narrow);
+    const narrow = forcedNarrow !== null ? forcedNarrow : (w > 0 ? w < NARROW_BELOW : L.narrow);
     const next = narrow ? LAYOUTS.narrow : LAYOUTS.wide;
     if (next === L && !force) return;
     L = next;
     root.classList.toggle('gw-narrow', L.narrow);
     svg.setAttribute('viewBox', '0 0 ' + L.vbW + ' ' + L.vbH);
     help.textContent = L.help;
+    buildStatic();
     draw();
   }
 
@@ -210,33 +200,23 @@
 
   // 누른 위치가 어느 창인지
   function regionAt(p) {
-    if (L.narrow) {
-      if (p.y >= L.lp.top - 28) return 'loupe';
-      return p.x < L.mag.x - 3 ? 'ov' : 'mag';
-    }
-    return p.x < (OV_X1 + L.mag.x) / 2 ? 'ov' : p.x < L.lp.x - 4 ? 'mag' : 'loupe';
+    if (L.narrow) return p.x < L.mag.x - 3 ? 'ov' : 'mag';
+    return p.x < (OV_X1 + L.mag.x) / 2 ? 'ov' : 'mag';
   }
 
   function bindDrag(target) {
     let drag = null;
     target.addEventListener('pointerdown', function (e) {
       const p = svgPoint(e);
-      const region = regionAt(p);
-      drag = { id: e.pointerId, region: region, y0: p.y, v0: region === 'loupe' ? loupeOffU : state };
+      drag = { id: e.pointerId, region: regionAt(p), y0: p.y, v0: state };
       try { target.setPointerCapture(e.pointerId); } catch (err) { /* 캡처 실패해도 드래그는 계속 */ }
       e.preventDefault();
     });
     target.addEventListener('pointermove', function (e) {
       if (!drag || e.pointerId !== drag.id) return;
       const dy = svgPoint(e).y - drag.y0;            // SVG y는 아래로 증가
-      if (drag.region === 'loupe') {
-        // 확대 창의 점선 상자(돋보기 구간)를 끄는 것과 같은 비율: 위로 끌면 구간이 위로 이동
-        loupeOffU = clampLoupe(drag.v0 - dy / kM() * 100);
-        draw();
-      } else {
-        const k = drag.region === 'ov' ? kO * L.ov.s : kM();
-        setState(drag.v0 - dy / k * 100);             // 위로 끌면 y 증가
-      }
+      const k = drag.region === 'ov' ? kO * L.ov.s : kM();
+      setState(drag.v0 - dy / k * 100);               // 위로 끌면 y 증가
     });
     function end(e) { if (drag && e.pointerId === drag.id) drag = null; }
     target.addEventListener('pointerup', end);
@@ -249,8 +229,6 @@
     });
   }
 
-  function clampLoupe(u) { return Math.max(-200, Math.min(LEN * 100 + 200, u)); }
-
   function setState(s) {
     const ns = Math.max(STATE_MIN, Math.min(STATE_MAX, Math.round(s / resU) * resU));
     const changed = ns !== state;
@@ -260,7 +238,7 @@
   }
   function closeAnswer() { revealed = false; if (ans) ans.classList.remove('open'); }
 
-  // ---- 그리기 (state에서만) ----
+  // ---- 그리기 도우미 ----
   function ln(x1, y1, x2, y2, cls) {
     return '<line x1="' + x1.toFixed(2) + '" y1="' + y1.toFixed(2) + '" x2="' + x2.toFixed(2) + '" y2="' + y2.toFixed(2) + '" class="' + cls + '"/>';
   }
@@ -270,27 +248,60 @@
   function tx(x, y, s, anchor, size, cls) {
     return '<text x="' + x.toFixed(2) + '" y="' + y.toFixed(2) + '" text-anchor="' + anchor + '" font-size="' + size + '" class="' + (cls || 'h-txt') + '">' + s + '</text>';
   }
-
-  function gf(name) { return ' fill="url(#' + ID + '-' + name + ')"'; }   // 그라데이션 채우기 속성
+  function gf(name) { return ' fill="url(#' + ID + '-' + name + ')"'; }   // 그라데이션·패턴 채우기 속성
   function pth(d, cls, extra) { return '<path d="' + d + '" class="' + cls + '"' + (extra || '') + '/>'; }
   function f2(v) { return v.toFixed(2); }
 
-  // 그라데이션 정의(색은 CSS 변수 → 다크모드 자동 전환)
-  function gradDefs() {
+  // 그라데이션·질감 패턴·로고 심볼 (색은 CSS 변수 → 다크모드 자동 전환)
+  function staticDefs() {
     function lg(name, dir, stops) {
       const xy = dir === 'h' ? 'x1="0" y1="0" x2="1" y2="0"' : dir === 'd' ? 'x1="0" y1="0" x2="1" y2="1"' : 'x1="0" y1="0" x2="0" y2="1"';
       return '<linearGradient id="' + ID + '-' + name + '" ' + xy + '>' +
         stops.map(function (st) { return '<stop offset="' + st[0] + '" style="stop-color:var(' + st[1] + ')"/>'; }).join('') +
         '</linearGradient>';
     }
+    const M_ = L.mag;
     return lg('gScale', 'h', [[0, '--sc0'], [0.45, '--sc1'], [1, '--sc0']]) +            // 본척 눈금면(무광 크롬)
       lg('gBevel', 'h', [[0, '--m0'], [0.6, '--m2'], [1, '--m1']]) +                       // 기둥 옆 모서리
-      lg('gMetal', 'h', [[0, '--m3'], [0.18, '--m1'], [0.5, '--m2'], [0.85, '--m3'], [1, '--m0']]) + // 크롬강 몸체
+      lg('gMetal', 'h', [[0, '--m3'], [0.18, '--m1'], [0.5, '--m2'], [0.85, '--m3'], [1, '--m0']]) + // 새틴 크롬 몸체
       lg('gMetalV', 'v', [[0, '--m1'], [0.45, '--m2'], [1, '--m0']]) +                     // 수평 부품(조, 블록)
       lg('gVern', 'd', [[0, '--vn0'], [1, '--vn1']]) +                                    // 부척판
-      lg('gBase', 'v', [[0, '--b1'], [0.12, '--b0'], [1, '--b2']]) +                       // 주철 베이스
+      lg('gBase', 'v', [[0, '--b1'], [0.25, '--b0'], [1, '--b2']]) +                       // 은회색 주물 베이스
+      lg('gPlinth', 'v', [[0, '--b0'], [1, '--b2']]) +                                     // 베이스 아랫단
       lg('gPlate', 'v', [[0, '--p0'], [1, '--p1']]) +                                     // 정반
-      lg('gKnurl', 'v', [[0, '--m3'], [0.4, '--m1'], [1, '--m0']]);                        // 손잡이·휠
+      lg('gKnurl', 'v', [[0, '--m3'], [0.4, '--m1'], [1, '--m0']]) +                        // 손잡이·휠
+      // 세로 헤어라인(연삭·새틴 크롬 질감)
+      '<pattern id="' + ID + '-brushV" patternUnits="userSpaceOnUse" width="2.2" height="9">' +
+        '<line x1="0.6" y1="0" x2="0.6" y2="9" class="h-brush"/></pattern>' +
+      // 주물 표면 알갱이 질감
+      '<pattern id="' + ID + '-grain" patternUnits="userSpaceOnUse" width="5" height="5">' +
+        '<circle cx="1" cy="1.2" r="0.45" class="h-grain"/><circle cx="3.6" cy="3.4" r="0.4" class="h-grain"/></pattern>' +
+      '<clipPath id="' + ID + '-clipM"><rect x="' + M_.x + '" y="' + M_.top + '" width="' + M_.w + '" height="' + (M_.bot - M_.top) + '"/></clipPath>' +
+      // 학교 엠블럼만 잘라 쓰는 심볼(원본 312×312 중 위쪽 엠블럼 부분)
+      '<symbol id="' + ID + '-emb" viewBox="78 0 156 175" overflow="hidden">' +
+        '<image href="' + LOGO_URI + '" x="0" y="0" width="312" height="312" preserveAspectRatio="xMidYMid meet"/></symbol>';
+  }
+
+  // 정적 바탕(defs)은 배치가 바뀔 때만 다시 만든다(로고 data URI를 드래그마다 다시 파싱하지 않도록)
+  function buildStatic() {
+    svg.innerHTML = '<defs>' + staticDefs() + '</defs><g id="' + ID + '-dyn"></g>';
+    dyn = svg.querySelector('#' + ID + '-dyn');
+  }
+
+  // 학교 명판: 엠블럼 + 문구. 반환 {s, h}
+  function nameplate(cx, top, w, emW, font, withText) {
+    const emH = emW * 175 / 156, pad = 5, lh = font * 1.32;
+    const h = pad + emH + (withText ? 3 + SCHOOL_LINES.length * lh : 0) + pad;
+    let s = rc(cx - w / 2, top, w, h, 'h-plate', ' rx="4"');
+    s += '<use href="#' + ID + '-emb" x="' + f2(cx - emW / 2) + '" y="' + f2(top + pad) + '" width="' + f2(emW) + '" height="' + f2(emH) + '"/>';
+    if (withText) {
+      let ty = top + pad + emH + 3 + font;
+      SCHOOL_LINES.forEach(function (t, i) {
+        s += tx(cx, ty, t, 'middle', i === 2 ? font * 0.95 : font, i === 2 ? 'h-plt' : 'h-plt-b');
+        ty += lh;
+      });
+    }
+    return { s: s, h: h };
   }
 
   // 나사 머리(일자 홈)
@@ -298,18 +309,17 @@
     return '<circle cx="' + f2(cx) + '" cy="' + f2(cy) + '" r="' + r + '" class="h-mtl"' + gf('gMetalV') + '/>' +
       ln(cx - r * 0.7, cy + r * 0.25, cx + r * 0.7, cy - r * 0.25, 'h-slot');
   }
-  // 오른쪽으로 튀어나온 클램프 나사(로렛 손잡이). xl = 몸체 오른쪽 면, cy = 중심 높이
+  // 오른쪽으로 튀어나온 클램프 노브(로렛 손잡이). xl = 몸체 오른쪽 면, cy = 중심 높이
   function clampKnob(xl, cy) {
     let s = rc(xl, cy - 2, 3, 4, 'h-mtl', gf('gMetalV'));
-    s += rc(xl + 3, cy - 5.5, 8, 11, 'h-mtl', gf('gKnurl') + ' rx="1.5"');
-    for (let k = -3; k <= 3; k += 2) s += ln(xl + 4, cy + k, xl + 10, cy + k, 'h-knurl');
+    s += rc(xl + 3, cy - 6, 9, 12, 'h-mtl', gf('gKnurl') + ' rx="2"');
+    for (let k = -4; k <= 4; k += 2) s += ln(xl + 4, cy + k, xl + 11, cy + k, 'h-knurl');
     return s;
   }
 
-  // 본척+부척 눈금 (확대 창/돋보기 창 공용). toY: 1/100mm → SVG y
+  // 본척+부척 눈금 (확대 창). toY: 1/100mm → SVG y
   function scales(o) {
     const y = state, toY = o.toY, a = revealed ? answer(state) : null;
-    const th = o.thin ? ' h-thin' : '';
     let s = '';
     // 정반(0mm 아래)
     const y0 = toY(0);
@@ -318,9 +328,10 @@
       s += ln(o.left, y0 + 0.5, o.right, y0 + 0.5, 'h-shine');
     }
     const yFloor = Math.min(y0, o.bot);   // 정반 윗면(그 아래로는 부품을 그리지 않음)
-    // 본척 기둥(눈금면 + 옆 모서리)
+    // 본척 기둥(눈금면 + 옆 모서리 + 헤어라인 질감)
     const colTop = Math.max(o.top, toY((300 + LEN + 5) * 100));
     s += rc(o.left + 6, colTop, o.ix - o.left - 6, yFloor - colTop, 'h-mtl', gf('gScale'));
+    s += rc(o.left + 6, colTop, o.ix - o.left - 6, yFloor - colTop, '', gf('brushV'));
     if (o.bevel) {
       s += rc(o.left + 6, colTop, o.bevel, yFloor - colTop, 'h-mtl', gf('gBevel'));
       s += ln(o.left + 6 + o.bevel + 0.5, colTop, o.left + 6 + o.bevel + 0.5, yFloor, 'h-shine');
@@ -331,23 +342,25 @@
       const sy = toY(m * 100);
       const len = m % 10 === 0 ? o.mL[2] : m % 5 === 0 ? o.mL[1] : o.mL[0];
       const hl = a && m === a.M + a.n;
-      s += ln(o.ix - len, sy, o.ix, sy, (hl ? 'h-hl' : 'h-tick') + th);
+      s += ln(o.ix - len, sy, o.ix, sy, hl ? 'h-hl' : 'h-tick');
       if (m % 10 === 0) s += tx(o.ix - o.mL[2] - 4, sy + o.font * 0.35, String(m / 10), 'end', o.font);   // 본척 숫자: cm
-      else if (o.allLabels) s += tx(o.ix - o.mL[2] - 4, sy + o.font * 0.3, (m / 10).toFixed(1), 'end', o.font - 3, 'h-cap');   // 돋보기 보조 숫자(cm)
     }
-    // 슬라이더 몸체(부척판을 둘러싼 크롬 틀 + 고정 나사) — 확대 창에서만
-    if (o.body) {
-      const bt = toY(y + LEN * 100 + 380), bb = Math.min(toY(y - 380), yFloor);
-      if (bb > bt) {
-        s += rc(o.ix, bt, o.right - o.ix, bb - bt, 'h-mtl', gf('gMetal'));
-        s += ln(o.ix, bt + 0.5, o.right, bt + 0.5, 'h-shine');
-        const rx = o.ix + o.vW + (o.right - o.ix - o.vW) / 2;
-        const sTop = toY(y + LEN * 100 + 150) + 34, sBot = toY(y - 150) - 34;
-        if (sTop > bt + 6 && sTop < bb - 6) s += screw(rx, sTop, 6);
-        if (sBot > bt + 6 && sBot < bb - 6) s += screw(rx, sBot, 6);
-        // 부척판 옆 그림자 홈
-        s += ln(o.ix + o.vW + 1.5, Math.max(bt, toY(y + LEN * 100 + 150)), o.ix + o.vW + 1.5, Math.min(bb, toY(y - 150)), 'h-shade');
-      }
+    // 슬라이더 몸체(부척판을 둘러싼 크롬 틀 + 고정 나사 + 학교 명판)
+    const bt = toY(y + LEN * 100 + 380), bb = Math.min(toY(y - 380), yFloor);
+    if (bb > bt) {
+      s += rc(o.ix, bt, o.right - o.ix, bb - bt, 'h-mtl', gf('gMetal'));
+      s += rc(o.ix, bt, o.right - o.ix, bb - bt, '', gf('brushV'));
+      s += ln(o.ix, bt + 0.5, o.right, bt + 0.5, 'h-shine');
+      const rx = o.ix + o.vW + (o.right - o.ix - o.vW) / 2;
+      const sTop = toY(y + LEN * 100 + 150) + 30, sBot = toY(y - 150) - 30;
+      if (sTop > bt + 6 && sTop < bb - 6) s += screw(rx, sTop, 6);
+      if (sBot > bt + 6 && sBot < bb - 6) s += screw(rx, sBot, 6);
+      // 부척판 옆 그림자 홈
+      s += ln(o.ix + o.vW + 1.5, Math.max(bt, toY(y + LEN * 100 + 150)), o.ix + o.vW + 1.5, Math.min(bb, toY(y - 150)), 'h-shade');
+      // 학교 명판: 부척 눈금 오른쪽 몸체 위(눈금을 가리지 않음), 슬라이더와 함께 움직임
+      const np = o.np, h0 = nameplate(0, 0, np.w, np.em, np.font, true).h;
+      const cy = toY(y + LEN * 50);
+      if (cy + h0 / 2 < yFloor - 2) s += nameplate(rx, cy - h0 / 2, np.w, np.em, np.font, true).s;
     }
     // 부척판
     const vt = toY(y + LEN * 100 + 150), vb = Math.min(toY(y - 150), yFloor);
@@ -359,16 +372,15 @@
       const sy = toY(u);
       const big = i % labelEvery === 0;
       const hl = a && i === a.n;
-      s += ln(o.ix, sy, o.ix + (big ? o.vL[1] : o.vL[0]), sy, (hl ? 'h-hl' : 'h-vtick') + th);
+      s += ln(o.ix, sy, o.ix + (big ? o.vL[1] : o.vL[0]), sy, hl ? 'h-hl' : 'h-vtick');
       if (big) s += tx(o.ix + o.vL[1] + 4, sy + o.font * 0.35, String(i / labelEvery), 'start', o.font);
-      else if (o.allLabels) s += tx(o.ix + o.vL[1] + 4, sy + o.font * 0.3, '(' + i + ')', 'start', o.font - 4, 'h-cap');
     }
     // 경계선
     s += ln(o.ix, o.top, o.ix, o.bot, 'h-iface');
     return s;
   }
 
-  // 전체 그림: 실물형 버니어 하이트게이지(정반·베이스·기둥·슬라이더·스크라이버·미세이송)
+  // 전체 그림: 실물형 버니어 하이트게이지(정반·베이스·기둥·슬라이더·스크라이버·클램프 노브)
   // F: 글자 배율(좁은 화면에서는 전체 그림을 축소해 그리므로 글자를 키운다), full: 보조 이름표까지 모두 표시
   function overview(y, F, full) {
     const ovY = function (u) { return OV_YB - u / 100 * kO; };
@@ -376,50 +388,60 @@
     // 정반
     s += rc(OV_X0, OV_YB, OV_X1 - OV_X0, 18, 'h-mtl', gf('gPlate'));
     s += ln(OV_X0, OV_YB + 0.5, OV_X1, OV_YB + 0.5, 'h-shine');
-    s += tx(OV_X1 - 5, OV_YB + 9 + 4 * F, '정반', 'end', 10 * F, 'h-lbl-inv');
-    // 기둥(본척) + 꼭대기 캡
-    const cTop = ovY(OV_MAXMM * 100);
-    s += rc(CX0, cTop, CX1 - CX0, OV_YB - BH + 2 - cTop, 'h-mtl', gf('gScale'));   // 아랫부분은 베이스에 박혀 있음
-    s += rc(CX0, cTop, 3, OV_YB - BH + 2 - cTop, '', gf('gBevel'));
-    s += rc(CX0 - 2, cTop - 5, CX1 - CX0 + 4, 6, 'h-mtl', gf('gMetalV') + ' rx="1.5"');
-    for (let m = 10; m <= 360; m += 10) {
+    s += tx(OV_X0 + 5, OV_YB + 9 + 4 * F, '정반', 'start', 10 * F, 'h-lbl-inv');
+
+    // 베이스(넓은 은회색 주물 받침): 아랫단 + 둥근 윗몸 + 앞면 손잡이 홈 + 기둥 고정 보스
+    const BT = OV_YB - BH, PL = OV_YB - 13;
+    s += rc(BX0, PL, BX1 - BX0, OV_YB - PL, 'h-mtl', gf('gPlinth') + ' rx="2"');
+    s += rc(BX0, PL, BX1 - BX0, OV_YB - PL, '', gf('grain'));
+    s += ln(BX0 + 2, PL + 0.8, BX1 - 2, PL + 0.8, 'h-shine');
+    const bd = 'M' + (BX0 + 5) + ' ' + PL + ' V' + (BT + 10) + ' Q' + (BX0 + 5) + ' ' + BT + ' ' + (BX0 + 15) + ' ' + BT +
+               ' H' + (BX1 - 18) + ' Q' + (BX1 - 5) + ' ' + BT + ' ' + (BX1 - 5) + ' ' + (BT + 13) + ' V' + PL + ' Z';
+    s += pth(bd, 'h-mtl', gf('gBase'));
+    s += pth(bd, '', gf('grain'));
+    s += pth('M' + (BX0 + 7) + ' ' + (BT + 9) + ' Q' + (BX0 + 7) + ' ' + (BT + 1.5) + ' ' + (BX0 + 15) + ' ' + (BT + 1.5) +
+             ' H' + (BX1 - 18) + ' Q' + (BX1 - 7) + ' ' + (BT + 1.5) + ' ' + (BX1 - 7) + ' ' + (BT + 12), 'h-shine');
+    // 앞면 손잡이 홈(오목한 곡면)
+    const gx0 = SR + 18, gx1 = BX1 - 12, gy0 = BT + 10, gy1 = PL - 6;
+    s += pth('M' + gx0 + ' ' + gy0 + ' Q' + ((gx0 + gx1) / 2) + ' ' + (gy0 + 7) + ' ' + gx1 + ' ' + gy0 +
+             ' V' + gy1 + ' H' + gx0 + ' Z', 'h-shadefill');
+    s += ln(gx0, gy1 + 0.5, gx1, gy1 + 0.5, 'h-shine');
+    if (full) s += tx((gx0 + gx1) / 2, gy1 - 4, '베이스', 'middle', 10, 'h-lbl');
+    s += rc(CX0 - 5, BT - 5, CX1 - CX0 + 10, 7, 'h-mtl', gf('gMetalV') + ' rx="1.5"');
+
+    // 기둥(본척, 연삭 크롬 빔) + 꼭대기 캡 + 상단 노브
+    const cTop = ovY(OV_MAXMM * 100), cBot = BT - 3;
+    s += rc(CX0, cTop, CX1 - CX0, cBot - cTop, 'h-mtl', gf('gScale'));
+    s += rc(CX0, cTop, CX1 - CX0, cBot - cTop, '', gf('brushV'));
+    s += rc(CX0, cTop, 3, cBot - cTop, '', gf('gBevel'));
+    s += ln(CX1 - 0.6, cTop, CX1 - 0.6, cBot, 'h-shade');
+    s += rc(CX0 - 3, cTop - 7, CX1 - CX0 + 6, 9, 'h-mtl', gf('gMetalV') + ' rx="2"');
+    const kx = CX0 + 9, ky = ovY(36450);
+    s += '<circle cx="' + kx + '" cy="' + f2(ky) + '" r="6.5" class="h-mtl"' + gf('gKnurl') + '/>';
+    s += '<circle cx="' + kx + '" cy="' + f2(ky) + '" r="2.6" class="h-mtl"' + gf('gMetalV') + '/>';
+    for (let m = 10; m <= 350; m += 10) {
       const sy = ovY(m * 100), big = m % 50 === 0;
       s += ln(CX1 - (big ? 9 : 5), sy, CX1, sy, 'h-tick h-thin');
-      if (big && m <= 300) s += tx(CX0 - 8, sy + 4 * F, String(m / 10), 'end', 11 * F);   // cm
+      if (big && m <= 300) s += tx(CX0 - 5, sy + 4 * F, String(m / 10), 'end', 11 * F);   // cm
     }
-    s += tx(BX0 - 4, OV_YB - 2, '0', 'end', 11 * F);
-    s += tx(OV_X0 + 2, ovY(360 * 100) + 4 * F, '본척', 'start', 11 * F, 'h-lbl');
-    if (full) {
-      s += tx(OV_X0 + 2, ovY(360 * 100) + 17, '(기둥)', 'start', 10, 'h-lbl');
-      s += tx(OV_X0 + 2, ovY(360 * 100) + 30, '단위 cm', 'start', 10, 'h-lbl');
-    }
-    // 베이스(무거운 주철 받침): 모따기 윤곽 + 윗면 광택 + 기둥 고정 보스
-    const BT = OV_YB - BH;
-    s += rc(CX0 - 5, BT - 5, CX1 - CX0 + 10, 6, 'h-mtl', gf('gMetalV'));
-    s += pth('M' + BX0 + ' ' + OV_YB + ' V' + (BT + 6) + ' L' + (BX0 + 6) + ' ' + BT + ' H' + (BX1 - 6) +
-             ' L' + BX1 + ' ' + (BT + 6) + ' V' + OV_YB + ' Z', 'h-mtl', gf('gBase'));
-    s += ln(BX0 + 6, BT + 0.8, BX1 - 6, BT + 0.8, 'h-shine');
-    s += rc(BX0 + 10, BT + 10, BX1 - BX0 - 20, 13, 'h-shade', ' rx="2"');
-    if (full) s += tx(OV_X0 + 2, BT - 5, '베이스', 'start', 10, 'h-lbl');
+    s += tx(BX0 - 3, OV_YB - 2, '0', 'end', 11 * F);
 
-    // ---- 움직이는 부분: 미세이송 블록 + 휠, 슬라이더(부척 창), 클램프, 스크라이버 조 ----
+    // 학교 명판: 빔 오른쪽 위(슬라이더·노브가 지나가지 않는 고정 영역)
+    const no = L.npOv;
+    s += nameplate(no.cx, no.top, no.w, no.em, no.font, no.text).s;
+
+    // ---- 움직이는 부분: 슬라이더(부척 창), 미세이송 나사, 클램프 노브 2개, 스크라이버 조 ----
     const sb = ovY(y);
     const bTop = ovY(y + (LEN + 4) * 100), bBot = Math.min(sb + 3, OV_YB);
-    const ffBot = ovY(y + (LEN + 10) * 100), ffTop = ovY(y + (LEN + 18) * 100);
-    // 미세이송 블록(기둥을 감싸는 클램프 블록)
-    s += rc(SL, ffTop, CX1 + 22 - SL, ffBot - ffTop, 'h-mtl', gf('gMetal') + ' rx="2"');
-    s += ln(SL + 2, ffTop + 0.6, CX1 + 20, ffTop + 0.6, 'h-shine');
-    s += clampKnob(CX1 + 22, (ffTop + ffBot) / 2);
-    // 미세이송 나사봉 + 휠(로렛 너트)
-    const rodX = CX1 + 16;
-    s += ln(rodX, ffBot, rodX, bTop, 'h-rod');
-    const wy = (ffBot + bTop) / 2;
-    s += rc(rodX - 11, wy - 4, 22, 8, 'h-mtl', gf('gKnurl') + ' rx="2"');
-    for (let k = -8; k <= 8; k += 2.6) s += ln(rodX + k, wy - 3.4, rodX + k, wy + 3.4, 'h-knurl');
-    if (full) s += tx(rodX + 14, wy + 3.5, '미세이송 휠', 'start', 10, 'h-lbl');
+    // 미세이송 나사(슬라이더 위 로렛 손잡이)
+    const fx = SR - 9;
+    s += ln(fx, bTop, fx, bTop - 6, 'h-rod');
+    s += rc(fx - 5, bTop - 12, 10, 7, 'h-mtl', gf('gKnurl') + ' rx="1.5"');
+    for (let k = -3; k <= 3; k += 2) s += ln(fx + k, bTop - 11.4, fx + k, bTop - 5.6, 'h-knurl');
     // 슬라이더 몸체 + 부척 창(창 안에는 뒤쪽 기둥의 본척 눈금면이 보임)
     const wTop = ovY(y + (LEN + 2) * 100), wBot = Math.min(sb + 1.5, bBot - 1);
     s += rc(SL, bTop, SR - SL, bBot - bTop, 'h-mtl', gf('gMetal') + ' rx="2"');
+    s += rc(SL, bTop, SR - SL, bBot - bTop, '', gf('brushV'));
     s += rc(CX0 + 2, wTop, CX1 - CX0 - 2, wBot - wTop, 'h-mtl', gf('gScale'));
     for (let m = Math.ceil((y + 1) / 1000) * 10 - 10; m * 100 <= y + (LEN + 2) * 100; m += 10) {
       const wy2 = ovY(m * 100);
@@ -432,33 +454,30 @@
       const vy = ovY(y + i * pitchU);
       s += ln(CX1, vy, CX1 + (i === 0 || i === N ? 8 : 5), vy, 'h-vtick h-thin');
     }
-    s += screw(SR - 7, bTop + 6, 2.4);
-    s += screw(SR - 7, wBot - 4, 2.4);
-    // 슬라이더 클램프 나사
-    s += clampKnob(SR, bTop + 10);
-    if (full) s += tx(SR + 15, bTop + 13, '클램프', 'start', 10, 'h-lbl');
-    // 스크라이버 조(홀더) + 스크라이버: 아래 날(파란 선) = 부척 0점 높이
-    s += rc(SR - 6, sb - 15, 48, 10, 'h-mtl', gf('gMetalV') + ' rx="1.5"');
-    s += screw(SR + 32, sb - 10, 2.8);
-    s += pth('M' + (SR - 6) + ' ' + f2(sb - 5) + ' H' + (OV_X1 - 30) + ' L' + (OV_X1 - 8) + ' ' + f2(sb) +
-             ' H' + (SR - 6) + ' Z', 'h-mtl', gf('gMetalV'));
-    s += ln(SR - 6, sb, OV_X1 - 8, sb, 'h-scr-edge');
-    s += tx(OV_X1 - 8, full ? sb - 8 : sb - 18, '스크라이버', 'end', 10 * F, 'h-lbl');
+    s += screw(SR - 4, bTop + 6, 2.2);
+    s += screw(SR - 4, wBot - 4, 2.2);
+    // 클램프 노브(위: 미세이송 고정, 아래: 슬라이더 고정)
+    s += clampKnob(SR, bTop + 14);
+    s += clampKnob(SR, bTop + (bBot - bTop) * 0.55);
+    // 스크라이버 조(홀더) + 스크라이버(왼쪽으로): 아래 날(파란 선) = 부척 0점 높이
+    s += rc(SL - 16, sb - 22, 18, 20, 'h-mtl', gf('gMetalV') + ' rx="1.5"');
+    s += screw(SL - 7, sb - 14, 2.8);
+    s += pth('M' + (SL - 16) + ' ' + f2(sb - 6) + ' H' + (OV_X0 + 30) + ' L' + (OV_X0 + 10) + ' ' + f2(sb) +
+             ' H' + (SL - 16) + ' Z', 'h-mtl', gf('gMetalV'));
+    s += ln(OV_X0 + 10, sb, SL - 16, sb, 'h-scr-edge');
+    s += tx(full ? OV_X0 + 10 : OV_X0 + 2, full ? sb - 10 : sb - 26, '스크라이버', 'start', full ? 10 : 8.5 * F, 'h-lbl');
     // 확대 창이 보여주는 구간
-    const loU = y - 500, hiU = y + (LEN + 5) * 100;
+    const loU = y - MAG_BELOW, hiU = loU + MAG_SPAN * 100;
     s += rc(CX0 - 12, ovY(hiU), SR - CX0 + 16, ovY(loU) - ovY(hiU), 'h-ind');
     return s;
   }
 
   function draw() {
-    if (!svg) return;
-    const y = state, km = kM(), M_ = L.mag, P = L.lp;
-    let s = '<defs>' + gradDefs() +
-      '<clipPath id="' + ID + '-clipM"><rect x="' + M_.x + '" y="' + M_.top + '" width="' + M_.w + '" height="' + (M_.bot - M_.top) + '"/></clipPath>' +
-      '<clipPath id="' + ID + '-clipL"><rect x="' + P.x + '" y="' + P.top + '" width="' + P.w + '" height="' + (P.bot - P.top) + '"/></clipPath>' +
-      '</defs>';
+    if (!dyn) return;
+    const y = state, km = kM(), M_ = L.mag;
+    let s = '';
 
-    // ---------- 전체 그림 (좁은 화면에서는 축소한 보조 그림) ----------
+    // ---------- 전체 그림 (좁은 화면에서는 축소한 그림) ----------
     if (L.narrow) {
       s += tx(4, 16, '전체', 'start', 13, 'h-cap');
       s += '<g transform="translate(' + L.ov.tx + ' ' + L.ov.ty + ') scale(' + L.ov.s + ')">' + overview(y, L.ov.F, false) + '</g>';
@@ -467,32 +486,17 @@
     }
 
     // ---------- 확대 창 ----------
-    const mLoU = y - 500, mHiU = y + (LEN + 5) * 100;
+    const mLoU = y - MAG_BELOW, mHiU = mLoU + MAG_SPAN * 100;
     const toYM = function (u) { return M_.bot - (u - mLoU) / 100 * km; };
     s += tx(M_.x, M_.capY, M_.cap, 'start', 13, 'h-cap');
     s += rc(M_.x, M_.top, M_.w, M_.bot - M_.top, 'h-panel');
     s += '<g clip-path="url(#' + ID + '-clipM)">';
     s += scales({ toY: toYM, loU: mLoU, hiU: mHiU, top: M_.top, bot: M_.bot, left: M_.x, right: M_.x + M_.w, ix: M_.ix,
-                  mL: M_.mL, vL: M_.vL, vW: M_.vW, font: M_.font, bevel: M_.bevel, body: true });
-    // 돋보기 구간 표시
-    const half = (P.bot - P.top) / 2 / kL * 100, lc = y + loupeOffU;
-    const it = toYM(lc + half), ib = toYM(lc - half);
-    s += rc(M_.x + 4, it, M_.w - 8, ib - it, 'h-ind');
+                  mL: M_.mL, vL: M_.vL, vW: M_.vW, font: M_.font, bevel: M_.bevel, np: M_.np });
     s += '</g>';
     s += rc(M_.x, M_.top, M_.w, M_.bot - M_.top, 'h-panel', ' style="fill:none"');
 
-    // ---------- 돋보기 창 ----------
-    const midY = (P.top + P.bot) / 2;
-    const toYL = function (u) { return midY - (u - lc) / 100 * kL; };
-    s += tx(P.x, P.capY, '돋보기 ×' + (kL / KL_BASE) + ' · cm (끌어서 이동)', 'start', 13, 'h-cap');
-    s += rc(P.x, P.top, P.w, P.bot - P.top, 'h-panel');
-    s += '<g clip-path="url(#' + ID + '-clipL)">';
-    s += scales({ toY: toYL, loU: lc - half - 100, hiU: lc + half + 100, top: P.top, bot: P.bot, left: P.x, right: P.x + P.w, ix: P.ix,
-                  mL: P.mL, vL: P.vL, vW: P.x + P.w - P.ix, font: P.font, thin: true, allLabels: true });
-    s += '</g>';
-    s += rc(P.x, P.top, P.w, P.bot - P.top, 'h-panel', ' style="fill:none"');
-
-    svg.innerHTML = s;
+    dyn.innerHTML = s;
   }
 
   function reveal() {
@@ -515,7 +519,6 @@
   }
 
   function newProblem() {
-    loupeOffU = LOUPE_DEFAULT;
     closeAnswer();
     state = randomState();
     draw();

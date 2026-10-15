@@ -118,18 +118,24 @@
   //  [이동 조 블록(핀) + 로드] ← 심블과 함께 왼쪽으로 이동
   //  [고정 조 블록(핀)][슬리브: 30 25 20 15 10 5 (화면 고정)][심블][래칫] ← 심블+래칫 왼쪽으로 이동
   // 심블 앞단 x = xOf(V) + EDGE_GAP. 눈금 m 은 V >= m 이면 가려짐(그리지 않음), V < m 이면 보임.
-  const VB_X = 0, VB_Y = 50, VB_W = 1000, VB_H = 290;
+  // 비율(참조 사진 기준): 슬리브 지름 52 : 심블 지름 100 (약 1.9배), 심블 길이 232 ≥ 슬리브 최대 노출 길이(약 300)에 근접,
+  // 심블 = 앞단 경사부(눈금 50등분) + 무늬 없는 띠 + 긴 널링부, 래칫은 심블보다 가늘다.
+  const VB_X = 0, VB_Y = 50, VB_W = 1090, VB_H = 290;
   const PX_MM = 11;                   // 1mm 당 px (슬리브·조 공통 → 로드로 연결된 움직임이 일치)
   const AXIS_Y = 230;                 // 슬리브 기선
-  const X5 = 766;                     // 슬리브 '5' 눈금 x
+  const X5 = 786;                     // 슬리브 '5' 눈금 x
   const SCALE_MAX = 31;               // 30 왼쪽에 1mm 여유 눈금(31, 숫자 없음): V=30.00 에서도 B=31 이 보임
   const EDGE_GAP = 1.2;               // 심블 앞단을 V 위치보다 오른쪽으로: V=m-0.01 일 때 눈금 m 이 앞단 왼쪽에 온전히 보임
-  const R0 = 400;                     // 고정 조 핀 바깥 측정면(오른쪽 면) x
+  const R0 = 410;                     // 고정 조 핀 바깥 측정면(오른쪽 면) x
   const PIN_W = 7, PIN_TOP = 96, EAR_Y = 150, BLK_TOP = 190, BLK_BOT = 270;
   const SL_X0 = R0 + 70;              // 슬리브 시작(고정 블록 오른쪽)
-  const SL_TOP = AXIS_Y - 28, SL_BOT = AXIS_Y + 28;
-  const TH_W = 104, RAT_W = 52, TH_R = 58, TH_TOP = AXIS_Y - TH_R, TH_BOT = AXIS_Y + TH_R;
-  const PX_PER_DIV = TH_R * 2 * Math.PI / 50;   // 기선 부근 심블 눈금 간격(px)
+  const SL_R = 26, SL_TOP = AXIS_Y - SL_R, SL_BOT = AXIS_Y + SL_R;
+  const TH_W = 232, RAT_W = 66, TH_R = 50, TH_TOP = AXIS_Y - TH_R, TH_BOT = AXIS_Y + TH_R;
+  const TH_BEV = 10, TH_EDGE = 40;    // 앞단 경사부: 앞단(반지름 40) → 10px 뒤 전체 반지름
+  const GRAD_W = 46, BAND_W = 40;     // 눈금 띠 폭, 무늬 없는 띠 폭(그 뒤는 널링)
+  const TICK_R = TH_R - 8;            // 심블 눈금이 놓이는 겉보기 반지름
+  const PX_PER_DIV = TICK_R * 2 * Math.PI / 50;   // 기선 부근 심블 눈금 간격(px)
+  const LOGO = 'data:image/jpeg;base64,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';
   function xOf(mm) { return X5 - (mm - 5) * PX_MM; }
 
   let root, svg, ans, gDyn, zSvg;
@@ -154,11 +160,34 @@
       '<linearGradient id="' + ID + '-gPin" x1="0" y1="0" x2="1" y2="0">' +
         '<stop offset="0" style="stop-color:var(--mLo)"/><stop offset=".45" style="stop-color:var(--mHi)"/>' +
         '<stop offset="1" style="stop-color:var(--mLo)"/></linearGradient>' +
+      // 원통 위에 덧씌우는 입체 음영(다크/라이트 공통)
+      '<linearGradient id="' + ID + '-gShade" x1="0" y1="0" x2="0" y2="1">' +
+        '<stop offset="0" stop-color="#000" stop-opacity=".45"/><stop offset=".22" stop-color="#fff" stop-opacity=".45"/>' +
+        '<stop offset=".45" stop-color="#fff" stop-opacity="0"/><stop offset=".8" stop-color="#000" stop-opacity=".2"/>' +
+        '<stop offset="1" stop-color="#000" stop-opacity=".5"/></linearGradient>' +
+      // 면(블록) 위 은은한 브러시 결
+      '<pattern id="' + ID + '-brush" width="40" height="3" patternUnits="userSpaceOnUse">' +
+        '<path d="M0 1 H40" stroke="#fff" stroke-opacity=".08" stroke-width=".8"/></pattern>' +
+      // 다이아몬드 널링
       '<pattern id="' + ID + '-knurl" width="6" height="6" patternUnits="userSpaceOnUse">' +
-        '<path class="s-knurl" d="M0 0 L6 6 M6 0 L0 6" fill="none"/></pattern>' +
+        '<rect width="6" height="6" style="fill:var(--grip)"/>' +
+        '<path d="M3 0 L6 3 L3 6 L0 3 Z" style="fill:var(--gripHi)" fill-opacity=".55"/>' +
+        '<path class="s-knurl" d="M0 0 L6 6 M6 0 L0 6" fill="none" stroke-width=".9"/></pattern>' +
       '<filter id="' + ID + '-sh" x="-5%" y="-5%" width="110%" height="120%">' +
         '<feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity=".22"/></filter>' +
       '</defs>';
+  }
+
+  // 학교 명판(정적, 눈금과 겹치지 않는 오른쪽 위 빈 곳): 엠블럼(원본 312x312 중 위 0~175px) + 문구
+  function logoPlate() {
+    const x = 676, y = 62, w = 316, hh = 56;
+    return '<g aria-label="한국폴리텍대학 광주캠퍼스 기계시스템과" pointer-events="none">' +
+      '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + hh + '" rx="6" fill="#f4f5f7" stroke="#9aa2ab" stroke-width="1"/>' +
+      '<svg x="' + (x + 4) + '" y="' + (y + 5) + '" width="82" height="46" viewBox="0 0 312 175" preserveAspectRatio="xMidYMid meet">' +
+        '<image href="' + LOGO + '" x="0" y="0" width="312" height="312"/></svg>' +
+      '<text x="' + (x + 90) + '" y="' + (y + 25) + '" fill="#2b3036" style="font:700 14px system-ui, \'Malgun Gothic\', sans-serif">한국폴리텍대학 광주캠퍼스</text>' +
+      '<text x="' + (x + 90) + '" y="' + (y + 44) + '" fill="#4b535c" style="font:600 12.5px system-ui, \'Malgun Gothic\', sans-serif">기계시스템과</text>' +
+      '</g>';
   }
 
   function mount(container) {
@@ -168,7 +197,7 @@
       '<div class="gw-sub">측정 범위 5.00 ~ 30.00 mm · 최소 눈금 0.01 mm · 슬리브 숫자는 심블 쪽(오른쪽) 5부터 왼쪽으로 커지고, ' +
         '값이 커질수록 심블이 왼쪽으로 가며 눈금을 덮습니다. 심블을 위아래로(미세) 또는 좌우로(빠르게) 끌거나 왼쪽 조를 끄세요. 마우스 휠도 됩니다.</div>' +
       '<svg class="gw-svg" id="' + ID + '-svg" viewBox="' + VB_X + ' ' + VB_Y + ' ' + VB_W + ' ' + VB_H + '" role="img" aria-label="내측마이크로미터 전체 모습">' +
-        defs() + '<g id="' + ID + '-dyn"></g></svg>' +
+        defs() + logoPlate() + '<g id="' + ID + '-dyn"></g></svg>' +
       '<div class="gw-zoombox"><div class="gw-zoomhead">확대 창 — 심블 앞단 왼쪽에 보이는 눈금과 기선에 맞는 심블 눈금을 읽으세요. 여기서 끌어도 움직입니다.</div>' +
         '<svg class="gw-zsvg" id="' + ID + '-z" viewBox="0 0 280 120" role="img" aria-label="심블 앞단 확대"></svg></div>' +
       '<div class="gw-bar"><button class="primary" id="' + ID + '-reveal">정답확인</button>' +
@@ -258,78 +287,109 @@
     h += '<text class="s-dimtxt" x="' + f((L + R0) / 2) + '" y="62" text-anchor="middle">안지름</text>';
 
     // 2) 로드(심블과 연결, 이동 조를 민다) — 이동 조 블록과 고정 조 블록 사이에 보임
-    h += '<rect class="s-edge" fill="' + U('gCyl') + '" x="' + f(L + 10) + '" y="' + (AXIS_Y - 9) + '" width="' + f(R0 - 12 - (L + 10)) + '" height="18"/>';
+    h += '<rect class="s-edge" fill="' + U('gCyl') + '" x="' + f(L + 10) + '" y="' + (AXIS_Y - 8) + '" width="' + f(R0 - 12 - (L + 10)) + '" height="16"/>';
 
     // 3) 이동 조 블록(드래그 가능): 둥근 보스 + 블록 + 위로 뻗은 핀 + 아래 클램프 나사
     h += '<g data-grab="jaw" class="s-grabx" filter="' + U('sh') + '">';
-    h += '<rect class="s-edge" fill="' + U('gCyl') + '" x="' + f(L - 66) + '" y="' + (AXIS_Y - 24) + '" width="14" height="48" rx="3"/>';
-    h += '<rect class="s-edge" fill="var(--mMid)" x="' + f(L - 33) + '" y="' + BLK_BOT + '" width="12" height="8"/>';
-    h += '<rect class="s-edge" fill="' + U('gGrip') + '" x="' + f(L - 40) + '" y="' + (BLK_BOT + 8) + '" width="26" height="14" rx="3"/>';
-    h += '<path class="s-edge" fill="' + U('gBlock') + '" d="M' + f(L - 54) + ' ' + BLK_TOP + ' L' + f(L - 34) + ' ' + BLK_TOP +
-         ' L' + f(L - 4) + ' ' + EAR_Y + ' L' + f(L + 12) + ' ' + EAR_Y + ' L' + f(L + 12) + ' ' + BLK_BOT + ' L' + f(L - 54) + ' ' + BLK_BOT + ' Z"/>';
+    // 왼쪽 둥근 보스(로드 끝 캡)
+    h += '<rect class="s-edge" fill="' + U('gCyl') + '" x="' + f(L - 74) + '" y="' + (AXIS_Y - 23) + '" width="26" height="46" rx="4"/>';
+    h += '<rect fill="' + U('gShade') + '" opacity=".5" x="' + f(L - 74) + '" y="' + (AXIS_Y - 23) + '" width="26" height="46" rx="4"/>';
+    // 클램프 나사(목 + 널링 머리)
+    h += '<rect class="s-edge" fill="' + U('gCyl') + '" x="' + f(L - 30) + '" y="' + BLK_BOT + '" width="10" height="8"/>';
+    h += '<rect class="s-edge" fill="' + U('knurl') + '" x="' + f(L - 39) + '" y="' + (BLK_BOT + 8) + '" width="28" height="15" rx="3"/>';
+    h += '<rect fill="' + U('gShade') + '" x="' + f(L - 39) + '" y="' + (BLK_BOT + 8) + '" width="28" height="15" rx="3"/>';
+    // 블록 + 위로 좁아지는 조 팔
+    const mvD = 'M' + f(L - 48) + ' ' + BLK_TOP + ' L' + f(L - 30) + ' ' + BLK_TOP + ' L' + f(L - 6) + ' ' + EAR_Y +
+                ' L' + f(L + 12) + ' ' + EAR_Y + ' L' + f(L + 12) + ' ' + BLK_BOT + ' L' + f(L - 48) + ' ' + BLK_BOT + ' Z';
+    h += '<path class="s-edge" fill="' + U('gBlock') + '" d="' + mvD + '"/>';
+    h += '<path fill="' + U('brush') + '" d="' + mvD + '"/>';
+    h += '<path d="M' + f(L - 46) + ' ' + (BLK_TOP + 2) + ' L' + f(L - 29) + ' ' + (BLK_TOP + 2) + ' L' + f(L - 5) + ' ' + (EAR_Y + 2) + ' L' + f(L + 10) + ' ' + (EAR_Y + 2) +
+         '" fill="none" stroke="#fff" stroke-opacity=".6" stroke-width="1.2"/>';
+    h += '<line x1="' + f(L + 4) + '" y1="' + (EAR_Y + 4) + '" x2="' + f(L + 4) + '" y2="' + (BLK_BOT - 2) + '" stroke="#000" stroke-opacity=".15"/>';
+    // 측정 핀
     h += '<rect class="s-edge" fill="' + U('gPin') + '" x="' + f(L) + '" y="' + PIN_TOP + '" width="' + PIN_W + '" height="' + (EAR_Y - PIN_TOP + 1) + '" rx="1.5"/>';
-    h += '<text class="s-engr" x="' + f(L - 50) + '" y="' + (AXIS_Y - 2) + '">5-30mm</text>';
-    h += '<rect x="' + f(L - 70) + '" y="' + (PIN_TOP - 6) + '" width="90" height="' + (BLK_BOT + 26 - PIN_TOP) + '" fill="transparent"/>';
+    h += '<text class="s-engr" x="' + f(L - 44) + '" y="' + (AXIS_Y - 14) + '">5-30mm</text>';
+    h += '<rect x="' + f(L - 78) + '" y="' + (PIN_TOP - 6) + '" width="98" height="' + (BLK_BOT + 26 - PIN_TOP) + '" fill="transparent"/>';
     h += '</g>';
-    h += '<text class="s-muted" x="' + f(L - 20) + '" y="' + (BLK_BOT + 42) + '" text-anchor="middle">이동 조</text>';
+    h += '<text class="s-muted" x="' + f(L - 18) + '" y="' + (BLK_BOT + 42) + '" text-anchor="middle">이동 조</text>';
 
     // 4) 고정 조 블록 + 핀 (화면 고정)
     h += '<g filter="' + U('sh') + '">';
-    h += '<path class="s-edge" fill="' + U('gBlock') + '" d="M' + (R0 - 12) + ' ' + EAR_Y + ' L' + (R0 + 4) + ' ' + EAR_Y +
-         ' L' + (R0 + 34) + ' ' + BLK_TOP + ' L' + (SL_X0 + 2) + ' ' + BLK_TOP + ' L' + (SL_X0 + 2) + ' ' + BLK_BOT + ' L' + (R0 - 12) + ' ' + BLK_BOT + ' Z"/>';
+    const fxD = 'M' + (R0 - 12) + ' ' + EAR_Y + ' L' + (R0 + 6) + ' ' + EAR_Y + ' L' + (R0 + 30) + ' ' + BLK_TOP +
+                ' L' + (SL_X0 + 2) + ' ' + BLK_TOP + ' L' + (SL_X0 + 2) + ' ' + BLK_BOT + ' L' + (R0 - 12) + ' ' + BLK_BOT + ' Z';
+    h += '<path class="s-edge" fill="' + U('gBlock') + '" d="' + fxD + '"/>';
+    h += '<path fill="' + U('brush') + '" d="' + fxD + '"/>';
+    h += '<path d="M' + (R0 - 10) + ' ' + (EAR_Y + 2) + ' L' + (R0 + 5) + ' ' + (EAR_Y + 2) + ' L' + (R0 + 29) + ' ' + (BLK_TOP + 2) + ' L' + SL_X0 + ' ' + (BLK_TOP + 2) +
+         '" fill="none" stroke="#fff" stroke-opacity=".6" stroke-width="1.2"/>';
+    h += '<line x1="' + (R0 - 4) + '" y1="' + (EAR_Y + 4) + '" x2="' + (R0 - 4) + '" y2="' + (BLK_BOT - 2) + '" stroke="#000" stroke-opacity=".15"/>';
     h += '<rect class="s-edge" fill="' + U('gPin') + '" x="' + (R0 - PIN_W) + '" y="' + PIN_TOP + '" width="' + PIN_W + '" height="' + (EAR_Y - PIN_TOP + 1) + '" rx="1.5"/>';
-    h += '<text class="s-engr" x="' + (R0 + 4) + '" y="' + (BLK_TOP + 18) + '">0.01mm</text>';
+    h += '<text class="s-engr" x="' + (R0 + 8) + '" y="' + (BLK_BOT - 10) + '">0.01mm</text>';
     h += '</g>';
-    h += '<text class="s-muted" x="' + (R0 + 24) + '" y="' + (BLK_BOT + 42) + '" text-anchor="middle">고정 조</text>';
+    h += '<text class="s-muted" x="' + (R0 + 30) + '" y="' + (BLK_BOT + 42) + '" text-anchor="middle">고정 조</text>';
 
     // 5) 슬리브(화면 고정): 왼→오 30 … 5, 1mm 눈금·숫자는 기선 위, 0.5mm 눈금은 기선 아래
     // 슬리브 오른쪽 부분은 심블 속으로 들어가 있다(심블 앞단 너머로는 그리지 않음)
     h += '<rect class="s-edge" fill="' + U('gCyl') + '" x="' + SL_X0 + '" y="' + SL_TOP + '" width="' + f(tE + 8 - SL_X0) + '" height="' + (SL_BOT - SL_TOP) + '"/>';
+    h += '<rect class="s-edge" fill="' + U('gCyl') + '" x="' + (SL_X0 - 2) + '" y="' + (SL_TOP - 3) + '" width="8" height="' + (SL_BOT - SL_TOP + 6) + '" rx="1.5"/>';
     h += '<line class="s-thin" x1="' + f(xOf(SCALE_MAX) - 6) + '" y1="' + AXIS_Y + '" x2="' + f(tE) + '" y2="' + AXIS_Y + '"/>';
     for (let m = 5; m <= SCALE_MAX; m++) {
       const x = xOf(m);
-      if (m <= 30 && m % 5 === 0 && x - 9 < tE) h +='<text class="s-txt" x="' + f(x) + '" y="' + (AXIS_Y - 19) + '" text-anchor="middle">' + m + '</text>';
+      if (m <= 30 && m % 5 === 0 && x - 9 < tE) h +='<text class="s-txt" x="' + f(x) + '" y="' + (AXIS_Y - 13) + '" text-anchor="middle">' + m + '</text>';
       if ((m - 5) * 100 <= s) continue;         // V >= m : 심블에 가려짐
-      const len = (m % 5 === 0) ? 15 : 9;
+      const len = (m % 5 === 0) ? 11 : 8;
       h += '<line class="s-tick" data-v="' + m + '" x1="' + f(x) + '" y1="' + AXIS_Y + '" x2="' + f(x) + '" y2="' + (AXIS_Y - len) + '"/>';
     }
     for (let m = 5; m < SCALE_MAX; m++) {
       const hv = m + 0.5, x = xOf(hv);
       if ((m - 5) * 100 + 50 <= s) continue;    // V >= m+0.5 : 가려짐
-      h += '<line class="s-tick" data-h="' + hv + '" x1="' + f(x) + '" y1="' + AXIS_Y + '" x2="' + f(x) + '" y2="' + (AXIS_Y + 9) + '"/>';
+      h += '<line class="s-tick" data-h="' + hv + '" x1="' + f(x) + '" y1="' + AXIS_Y + '" x2="' + f(x) + '" y2="' + (AXIS_Y + 8) + '"/>';
     }
 
-    // 6) 심블(널링) + 래칫 — 측정값이 커지면 왼쪽으로 이동하며 슬리브를 덮는다
+    // 6) 심블 + 래칫 — 측정값이 커지면 왼쪽으로 이동하며 슬리브를 덮는다
+    //    [앞단 경사부 + 눈금 띠(50등분)] [무늬 없는 띠] [널링부] [끝 모따기] → [래칫]
     h += '<g data-grab="thimble" class="s-grab" filter="' + U('sh') + '">';
-    const gradW = 46;
-    h += '<path class="s-edge" fill="' + U('gCyl') + '" d="M' + f(tE) + ' ' + (TH_TOP + 8) + ' L' + f(tE + gradW) + ' ' + TH_TOP +
-         ' L' + f(tE + gradW) + ' ' + TH_BOT + ' L' + f(tE) + ' ' + (TH_BOT - 8) + ' Z"/>';
-    h += '<rect class="s-edge" fill="' + U('gGrip') + '" x="' + f(tE + gradW) + '" y="' + (TH_TOP - 2) + '" width="' + (TH_W - gradW) + '" height="' + (TH_BOT - TH_TOP + 4) + '" rx="3"/>';
-    h += '<rect fill="' + U('knurl') + '" x="' + f(tE + gradW + 6) + '" y="' + (TH_TOP + 4) + '" width="' + (TH_W - gradW - 12) + '" height="' + (TH_BOT - TH_TOP - 8) + '"/>';
-    h += '<rect fill="' + U('gGrip') + '" opacity=".35" x="' + f(tE + gradW) + '" y="' + (TH_TOP - 2) + '" width="' + (TH_W - gradW) + '" height="' + (TH_BOT - TH_TOP + 4) + '" rx="3"/>';
+    const tB = tE + GRAD_W + BAND_W;            // 널링 시작
+    const tR = tE + TH_W;                       // 심블 끝
+    const thD = 'M' + f(tE) + ' ' + (AXIS_Y - TH_EDGE) + ' L' + f(tE + TH_BEV) + ' ' + TH_TOP + ' L' + f(tR - 8) + ' ' + TH_TOP +
+                ' L' + f(tR) + ' ' + (TH_TOP + 6) + ' L' + f(tR) + ' ' + (TH_BOT - 6) + ' L' + f(tR - 8) + ' ' + TH_BOT +
+                ' L' + f(tE + TH_BEV) + ' ' + TH_BOT + ' L' + f(tE) + ' ' + (AXIS_Y + TH_EDGE) + ' Z';
+    h += '<path class="s-edge" fill="' + U('gCyl') + '" d="' + thD + '"/>';
+    // 널링부(무늬 + 원통 음영)
+    const knW = TH_W - GRAD_W - BAND_W - 16;
+    h += '<rect fill="' + U('knurl') + '" x="' + f(tB + 4) + '" y="' + (TH_TOP + 1) + '" width="' + knW + '" height="' + (TH_BOT - TH_TOP - 2) + '"/>';
+    h += '<rect fill="' + U('gShade') + '" x="' + f(tB + 4) + '" y="' + (TH_TOP + 1) + '" width="' + knW + '" height="' + (TH_BOT - TH_TOP - 2) + '"/>';
+    // 경계 홈선
+    h += '<line x1="' + f(tE + GRAD_W) + '" y1="' + (TH_TOP + 1) + '" x2="' + f(tE + GRAD_W) + '" y2="' + (TH_BOT - 1) + '" stroke="var(--mEdge)" stroke-opacity=".45"/>';
+    h += '<line x1="' + f(tB + 2) + '" y1="' + (TH_TOP + 1) + '" x2="' + f(tB + 2) + '" y2="' + (TH_BOT - 1) + '" stroke="var(--mEdge)" stroke-width="2" stroke-opacity=".6"/>';
+    h += '<line x1="' + f(tR - 10) + '" y1="' + (TH_TOP + 1) + '" x2="' + f(tR - 10) + '" y2="' + (TH_BOT - 1) + '" stroke="var(--mEdge)" stroke-width="1.5" stroke-opacity=".6"/>';
+    h += '<line x1="' + f(tE + TH_BEV) + '" y1="' + (TH_TOP + 1) + '" x2="' + f(tE + TH_BEV) + '" y2="' + (TH_BOT - 1) + '" stroke="#fff" stroke-opacity=".35"/>';
+    h += '<text class="s-engr" transform="translate(' + f(tE + GRAD_W + BAND_W / 2 + 4) + ' ' + AXIS_Y + ') rotate(-90)" text-anchor="middle">0.01mm</text>';
+    // 심블 눈금(앞단 경사부에서 시작) — 기선에 오는 눈금이 읽는 값
     const frac = s % 50;                        // 기선에 오는 심블 눈금(실수)
     for (let k = 0; k < 50; k++) {
       let d = k - frac;
       d = ((d % 50) + 75) % 50 - 25;
       const th = d * 2 * Math.PI / 50;
-      if (Math.abs(th) > 1.3) continue;
-      const y = AXIS_Y + (TH_R - 6) * Math.sin(th);   // 사진처럼 위에서부터 45, 0, 5 … (아래로 갈수록 커짐)
-      const len = (k % 5 === 0) ? 18 : 11;
+      if (Math.abs(th) > 1.2) continue;
+      const y = AXIS_Y + TICK_R * Math.sin(th);   // 사진처럼 위에서부터 45, 0, 5 … (아래로 갈수록 커짐)
+      const len = (k % 5 === 0) ? 16 : 10;
       const op = Math.max(0.2, Math.cos(th)).toFixed(2);
       h += '<line class="s-thin" data-k="' + k + '" x1="' + f(tE) + '" y1="' + f(y) + '" x2="' + f(tE + len) + '" y2="' + f(y) + '" stroke-opacity="' + op + '"/>';
-      if (k % 5 === 0) h += '<text class="s-txt-s" x="' + f(tE + 22) + '" y="' + f(y + 4) + '" fill-opacity="' + op + '">' + k + '</text>';
+      if (k % 5 === 0) h += '<text class="s-txt-s" x="' + f(tE + 20) + '" y="' + f(y + 4) + '" fill-opacity="' + op + '">' + k + '</text>';
     }
-    const rx0 = tE + TH_W;
-    h += '<rect class="s-edge" fill="' + U('gCyl') + '" x="' + f(rx0) + '" y="' + (AXIS_Y - 20) + '" width="10" height="40"/>';
-    h += '<rect class="s-edge" fill="' + U('gGrip') + '" x="' + f(rx0 + 10) + '" y="' + (AXIS_Y - 30) + '" width="' + (RAT_W - 10) + '" height="60" rx="8"/>';
-    for (let i = 0; i < 7; i++) {
-      const yy = AXIS_Y - 24 + i * 8 + (frac * 1.3) % 8;
-      if (yy > AXIS_Y + 26) continue;
-      h += '<line x1="' + f(rx0 + 13) + '" y1="' + f(yy) + '" x2="' + f(rx0 + RAT_W - 3) + '" y2="' + f(yy) + '" stroke="var(--knurl)" stroke-width="1.6"/>';
+    // 래칫: 가는 목 + 심블보다 가는 손잡이(축 방향 홈이 회전에 따라 흐름)
+    const rx0 = tR;
+    h += '<rect class="s-edge" fill="' + U('gCyl') + '" x="' + f(rx0) + '" y="' + (AXIS_Y - 18) + '" width="9" height="36"/>';
+    h += '<rect class="s-edge" fill="' + U('gGrip') + '" x="' + f(rx0 + 9) + '" y="' + (AXIS_Y - 28) + '" width="' + (RAT_W - 9) + '" height="56" rx="7"/>';
+    for (let i = 0; i < 8; i++) {
+      const yy = AXIS_Y - 25 + i * 7 + (frac * 1.3) % 7;
+      if (yy > AXIS_Y + 25) continue;
+      h += '<line x1="' + f(rx0 + 13) + '" y1="' + f(yy) + '" x2="' + f(rx0 + RAT_W - 6) + '" y2="' + f(yy) + '" stroke="var(--knurl)" stroke-width="1.4"/>';
     }
+    h += '<rect fill="' + U('gShade') + '" opacity=".7" x="' + f(rx0 + 9) + '" y="' + (AXIS_Y - 28) + '" width="' + (RAT_W - 9) + '" height="56" rx="7"/>';
     h += '</g>';
     h += '<text class="s-muted" x="' + f(tE + TH_W / 2) + '" y="' + (TH_BOT + 22) + '" text-anchor="middle">심블</text>';
-    h += '<text class="s-muted" x="' + f(rx0 + RAT_W / 2 + 5) + '" y="' + (AXIS_Y + 50) + '" text-anchor="middle">래칫</text>';
+    h += '<text class="s-muted" x="' + f(rx0 + RAT_W / 2 + 4) + '" y="' + (AXIS_Y + 50) + '" text-anchor="middle">래칫</text>';
 
     gDyn.innerHTML = h;
     const kp = svg.querySelector('#' + ID + '-knurl');
@@ -338,7 +398,7 @@
     // 확대 창(항상 표시): 심블 앞단 주변(슬리브 눈금 + 기선 + 심블 눈금이 한 곳에서 읽힘)
     // 좁은 화면(휴대폰)에서는 범위를 좁혀 더 크게 보이게 한다.
     const narrow = isNarrow();
-    svg.setAttribute('viewBox', narrow ? '0 54 935 282' : (VB_X + ' ' + VB_Y + ' ' + VB_W + ' ' + VB_H));
+    svg.setAttribute('viewBox', narrow ? '0 54 ' + (VB_W - 50) + ' 282' : (VB_X + ' ' + VB_Y + ' ' + VB_W + ' ' + VB_H));
     {
       if (narrow) zSvg.setAttribute('viewBox', f(tE - 128) + ' ' + (AXIS_Y - 61) + ' 190 122');
       else zSvg.setAttribute('viewBox', f(tE - 196) + ' ' + (AXIS_Y - 61) + ' 280 122');
