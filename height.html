@@ -9,11 +9,17 @@
           /* 금속 그라데이션 색: sc=본척 눈금면(무광 크롬), m=슬라이더·기둥 몸체(새틴 크롬), vn=부척판, b=베이스(은회색 주물), p=정반(석정반) */
           --sc0:#d3d9df; --sc1:#f4f6f8; --m0:#7d868f; --m1:#f6f8fa; --m2:#c9cfd5; --m3:#9ba3ab;
           --vn0:#f1f4f7; --vn1:#d6dde5; --b0:#bcc2c8; --b1:#eceff1; --b2:#8e959c; --p0:#a3a9af; --p1:#767c82;
-          --shine:rgba(255,255,255,0.75); --shade:rgba(0,0,0,0.35); --inv:#f3f5f7; }
+          --shine:rgba(255,255,255,0.75); --shade:rgba(0,0,0,0.35); --inv:#f3f5f7;
+          /* 정답 강조: hl=어미자·아들자 일치선(빨강), rd=읽은 본척 눈금(파랑) */
+          --hl:#d1242f; --rd:#0969da;
+          /* 각인: eng=새겨진 바닥색, eng-sh=위쪽 안쪽 그림자, eng-hi=아래쪽 밝은 테두리 */
+          --eng:#4a535d; --eng-sh:#1f2429; --eng-hi:rgba(255,255,255,0.9); }
   @media (prefers-color-scheme: dark) { :root { --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --line:#30363d; --accent:#4493f8; --ok:#3fb950; --panel:#11161d;
           --sc0:#252b33; --sc1:#353d47; --m0:#13171c; --m1:#6b7682; --m2:#3e4752; --m3:#272e36;
           --vn0:#3b4451; --vn1:#2a313b; --b0:#3a4148; --b1:#5d6670; --b2:#1d2126; --p0:#3b4046; --p1:#23272c;
-          --shine:rgba(255,255,255,0.22); --shade:rgba(0,0,0,0.55); --inv:#d7dde3; } }
+          --shine:rgba(255,255,255,0.22); --shade:rgba(0,0,0,0.55); --inv:#d7dde3;
+          --hl:#ff5a5f; --rd:#58a6ff;
+          --eng:#9ea9b5; --eng-sh:#0a0d10; --eng-hi:rgba(255,255,255,0.28); } }
   body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, "Malgun Gothic", sans-serif; }
   .gw-svg { width:100%; height:auto; max-width:900px; max-height:max(340px, calc(100vh - 200px)); touch-action:none; user-select:none; -webkit-user-select:none; display:block; outline:none; }
   .gw-svg:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
@@ -52,16 +58,24 @@
   .h-lbl-inv { fill:var(--inv); font-family:system-ui, "Malgun Gothic", sans-serif; }
   .h-tick { stroke:var(--fg); stroke-width:1.2; }
   .h-vtick { stroke:var(--fg); stroke-width:1.2; }
-  .h-hl { stroke:var(--ok); stroke-width:2.6; }
+  .h-hl { stroke:var(--hl); stroke-width:3.6; }                       /* 일치하는 본척·부척 눈금선 */
+  .h-hlx { stroke:var(--hl); stroke-width:3.6; stroke-linecap:round; }  /* 일치선을 양쪽으로 이은 선 */
+  .h-halo { stroke:var(--hl); stroke-opacity:0.28; stroke-width:11; stroke-linecap:round; }
+  .h-hlmark { fill:var(--hl); }
+  .h-hltxt { fill:var(--hl); font-weight:700; font-family:system-ui, "Malgun Gothic", sans-serif; }
+  .h-rd { stroke:var(--rd); stroke-width:2.6; }                        /* 읽은 본척 눈금(부척 0점 바로 아래) */
+  .h-rdmark { fill:var(--rd); }
+  .h-rdtxt { fill:var(--rd); font-weight:700; font-family:system-ui, "Malgun Gothic", sans-serif; }
   .h-thin { stroke-width:0.8; }
   .h-txt { fill:var(--fg); font-family:system-ui, "Malgun Gothic", sans-serif; }
   .h-cap { fill:var(--muted); font-size:13px; font-family:system-ui, "Malgun Gothic", sans-serif; }
   .h-ind { fill:var(--accent); fill-opacity:0.08; stroke:var(--accent); stroke-dasharray:4 3; }
   .h-iface { stroke:var(--accent); stroke-width:1; stroke-opacity:0.5; }
-  /* 학교 명판(로고 + 문구): 다크 모드에서도 흰 명판 그대로(로고 jpg 배경이 흰색) */
-  .h-plate { fill:#fff; stroke:#aab2ba; stroke-width:0.8; }
-  .h-plt { fill:#1f2328; font-family:system-ui, "Malgun Gothic", sans-serif; }
-  .h-plt-b { fill:#0b3d91; font-weight:700; font-family:system-ui, "Malgun Gothic", sans-serif; }
+  /* 학교 로고·문구 각인: 검정으로 그린 뒤 각인 필터가 색·그림자·하이라이트를 입힌다 */
+  .h-engt { fill:#000; font-weight:700; font-family:system-ui, "Malgun Gothic", sans-serif; }
+  .h-eng-c { flood-color:var(--eng); }
+  .h-eng-s { flood-color:var(--eng-sh); }
+  .h-eng-h { flood-color:var(--eng-hi); }
 </style>
 </head>
 <body>
@@ -138,15 +152,15 @@
     wide: { narrow: false, vbW: 660, vbH: 600,
       ov: { tx: 0, ty: 0, s: 1, F: 1 },
       mag: { x: 250, w: 404, top: 26, bot: 586, ix: 390, vW: 96, mL: [14, 24, 36], vL: [18, 32], font: 14, bevel: 10, capY: 16,
-             cap: '확대 창 (본척 숫자 단위 cm, 1칸 = 1mm)', np: { w: 118, em: 54, font: 11 } },
-      npOv: { cx: 202, top: 62, w: 66, em: 46, font: 8.5, text: true },
+             cap: '확대 창 (본척 숫자 단위 cm, 1칸 = 1mm)', np: { em: 78, font: 12.5 } },
+      npOv: { x: 135, top: 525, em: 22, font: 7.2, text: true },   // 베이스 앞면 각인(엠블럼 폭 em)
       help: '왼쪽 전체 그림을 위아래로 끌면 크게, 오른쪽 확대 창을 끌면 미세하게 슬라이더가 움직입니다. ' +
             '키보드: ↑↓(0.02mm), PageUp/PageDown(1mm).' },
     narrow: { narrow: true, vbW: 400, vbH: 430,
       ov: { tx: 0, ty: 18, s: 0.66, F: 1.6 },
       mag: { x: 164, w: 232, top: 26, bot: 422, ix: 248, vW: 66, mL: [10, 17, 26], vL: [14, 24], font: 13, bevel: 6, capY: 16,
-             cap: '확대 창 (숫자 cm)', np: { w: 74, em: 40, font: 8 } },
-      npOv: { cx: 202, top: 62, w: 66, em: 54, font: 0, text: false },
+             cap: '확대 창 (숫자 cm)', np: { em: 52, font: 9 } },
+      npOv: { x: 168, top: 522, em: 25, font: 0, text: false },
       help: '왼쪽 전체 그림(크게) 또는 오른쪽 확대 창(미세)을 위아래로 끌어 슬라이더를 움직이세요.' }
   };
   let L = LAYOUTS.wide;
@@ -279,7 +293,23 @@
       '<clipPath id="' + ID + '-clipM"><rect x="' + M_.x + '" y="' + M_.top + '" width="' + M_.w + '" height="' + (M_.bot - M_.top) + '"/></clipPath>' +
       // 학교 엠블럼만 잘라 쓰는 심볼(원본 312×312 중 위쪽 엠블럼 부분)
       '<symbol id="' + ID + '-emb" viewBox="78 0 156 175" overflow="hidden">' +
-        '<image href="' + LOGO_URI + '" x="0" y="0" width="312" height="312" preserveAspectRatio="xMidYMid meet"/></symbol>';
+        '<image href="' + LOGO_URI + '" x="0" y="0" width="312" height="312" preserveAspectRatio="xMidYMid meet"/></symbol>' +
+      engFilter('eng', 1) + engFilter('engS', 0.7);
+  }
+
+  // 각인 필터: 밝은 픽셀(로고 흰 배경)은 투명, 어둡거나 색이 있는 픽셀(엠블럼·검정 글자)은 불투명한 모양(m)으로 바꾼 뒤
+  //   ① 모양을 아래로 d만큼 민 테두리 = 아래쪽 밝은 하이라이트, ② 모양 = 새겨진 바닥색, ③ 모양 안쪽 위 가장자리 = 어두운 그림자
+  // alpha = 2.45·A − 2.6·(0.2R + 0.4G + 0.4B): 흰색→0, 주황·파랑·연두·검정→1 (투명 픽셀은 A=0이라 그대로 투명)
+  function engFilter(name, d) {
+    return '<filter id="' + ID + '-' + name + '" x="-6%" y="-6%" width="112%" height="118%" color-interpolation-filters="sRGB">' +
+      '<feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -0.52 -1.04 -1.04 2.45 0" result="m"/>' +
+      '<feOffset in="m" dy="' + d + '" result="md"/>' +
+      '<feComposite in="md" in2="m" operator="out" result="hiA"/>' +
+      '<feFlood class="h-eng-h" result="hiC"/><feComposite in="hiC" in2="hiA" operator="in" result="hi"/>' +
+      '<feFlood class="h-eng-c" result="fc"/><feComposite in="fc" in2="m" operator="in" result="fill"/>' +
+      '<feComposite in="m" in2="md" operator="out" result="shA"/>' +
+      '<feFlood class="h-eng-s" result="sc"/><feComposite in="sc" in2="shA" operator="in" result="sh"/>' +
+      '<feMerge><feMergeNode in="hi"/><feMergeNode in="fill"/><feMergeNode in="sh"/></feMerge></filter>';
   }
 
   // 정적 바탕(defs)은 배치가 바뀔 때만 다시 만든다(로고 data URI를 드래그마다 다시 파싱하지 않도록)
@@ -288,20 +318,28 @@
     dyn = svg.querySelector('#' + ID + '-dyn');
   }
 
-  // 학교 명판: 엠블럼 + 문구. 반환 {s, h}
-  function nameplate(cx, top, w, emW, font, withText) {
-    const emH = emW * 175 / 156, pad = 5, lh = font * 1.32;
-    const h = pad + emH + (withText ? 3 + SCHOOL_LINES.length * lh : 0) + pad;
-    let s = rc(cx - w / 2, top, w, h, 'h-plate', ' rx="4"');
-    s += '<use href="#' + ID + '-emb" x="' + f2(cx - emW / 2) + '" y="' + f2(top + pad) + '" width="' + f2(emW) + '" height="' + f2(emH) + '"/>';
+  // 학교 각인(엠블럼 + 문구, 흰 명판 없음): 금속 몸체에 새긴 것처럼 각인 필터를 건다
+  function emblemUse(x, y, emW) {
+    return '<use href="#' + ID + '-emb" x="' + f2(x) + '" y="' + f2(y) + '" width="' + f2(emW) + '" height="' + f2(emW * 175 / 156) + '"/>';
+  }
+  // 세로 배치(확대 창 슬라이더 몸체): 엠블럼 아래 문구 3줄, 가운데 정렬. 반환 {s, h}
+  function engravingV(cx, top, emW, font) {
+    const emH = emW * 175 / 156, lh = font * 1.3;
+    const h = emH + 4 + SCHOOL_LINES.length * lh;
+    let s = '<g filter="url(#' + ID + '-eng)">' + emblemUse(cx - emW / 2, top, emW);
+    let ty = top + emH + 4 + font;
+    SCHOOL_LINES.forEach(function (t) { s += tx(cx, ty, t, 'middle', font, 'h-engt'); ty += lh; });
+    return { s: s + '</g>', h: h };
+  }
+  // 가로 배치(전체 그림 베이스 앞면): 왼쪽 엠블럼, 오른쪽 문구 3줄(withText=false면 엠블럼만)
+  function engravingH(x, top, emW, font, withText) {
+    const emH = emW * 175 / 156, lh = font * 1.2;
+    let s = '<g filter="url(#' + ID + '-engS)">' + emblemUse(x, top, emW);
     if (withText) {
-      let ty = top + pad + emH + 3 + font;
-      SCHOOL_LINES.forEach(function (t, i) {
-        s += tx(cx, ty, t, 'middle', i === 2 ? font * 0.95 : font, i === 2 ? 'h-plt' : 'h-plt-b');
-        ty += lh;
-      });
+      let ty = top + (emH - SCHOOL_LINES.length * lh) / 2 + font * 0.92;
+      SCHOOL_LINES.forEach(function (t) { s += tx(x + emW + 4, ty, t, 'start', font, 'h-engt'); ty += lh; });
     }
-    return { s: s, h: h };
+    return s + '</g>';
   }
 
   // 나사 머리(일자 홈)
@@ -341,8 +379,8 @@
     for (let m = mLo; m <= mHi; m++) {
       const sy = toY(m * 100);
       const len = m % 10 === 0 ? o.mL[2] : m % 5 === 0 ? o.mL[1] : o.mL[0];
-      const hl = a && m === a.M + a.n;
-      s += ln(o.ix - len, sy, o.ix, sy, hl ? 'h-hl' : 'h-tick');
+      const hl = a && m === a.M + a.n, rd = a && m === a.M;
+      s += ln(o.ix - len, sy, o.ix, sy, hl ? 'h-hl' : rd ? 'h-rd' : 'h-tick');
       if (m % 10 === 0) s += tx(o.ix - o.mL[2] - 4, sy + o.font * 0.35, String(m / 10), 'end', o.font);   // 본척 숫자: cm
     }
     // 슬라이더 몸체(부척판을 둘러싼 크롬 틀 + 고정 나사 + 학교 명판)
@@ -357,10 +395,10 @@
       if (sBot > bt + 6 && sBot < bb - 6) s += screw(rx, sBot, 6);
       // 부척판 옆 그림자 홈
       s += ln(o.ix + o.vW + 1.5, Math.max(bt, toY(y + LEN * 100 + 150)), o.ix + o.vW + 1.5, Math.min(bb, toY(y - 150)), 'h-shade');
-      // 학교 명판: 부척 눈금 오른쪽 몸체 위(눈금을 가리지 않음), 슬라이더와 함께 움직임
-      const np = o.np, h0 = nameplate(0, 0, np.w, np.em, np.font, true).h;
+      // 학교 각인: 부척판 오른쪽 슬라이더 몸체(눈금을 가리지 않음), 슬라이더와 함께 움직임
+      const np = o.np, h0 = engravingV(0, 0, np.em, np.font).h;
       const cy = toY(y + LEN * 50);
-      if (cy + h0 / 2 < yFloor - 2) s += nameplate(rx, cy - h0 / 2, np.w, np.em, np.font, true).s;
+      if (cy + h0 / 2 < yFloor - 2) s += engravingV(rx, cy - h0 / 2, np.em, np.font).s;
     }
     // 부척판
     const vt = toY(y + LEN * 100 + 150), vb = Math.min(toY(y - 150), yFloor);
@@ -374,6 +412,20 @@
       const hl = a && i === a.n;
       s += ln(o.ix, sy, o.ix + (big ? o.vL[1] : o.vL[0]), sy, hl ? 'h-hl' : 'h-vtick');
       if (big) s += tx(o.ix + o.vL[1] + 4, sy + o.font * 0.35, String(i / labelEvery), 'start', o.font);
+    }
+    // 정답확인 상태: 일치선(본척 M+n = 부척 n번째)을 빨간 굵은 선으로 본척·부척에 걸쳐 잇고, 읽은 본척 눈금(M)은 파란 표식
+    if (a) {
+      const xl = o.ix - o.mL[2] - 2, xr = o.ix + o.vL[1] + 2, mx = o.left + 6 + (L.narrow ? 2 : (o.bevel || 0) + 3), ts = o.font * 0.82;
+      const tri = function (yy, cls) {
+        return pth('M' + f2(mx) + ' ' + f2(yy - 5) + ' L' + f2(mx + 9) + ' ' + f2(yy) + ' L' + f2(mx) + ' ' + f2(yy + 5) + ' Z', cls);
+      };
+      if (a.n !== 0) {
+        const ry = toY(a.M * 100);
+        s += tri(ry, 'h-rdmark') + tx(mx + 12, ry + ts * 0.36, L.narrow ? '본척' : '읽은 본척', 'start', ts, 'h-rdtxt');
+      }
+      const cy2 = toY((a.M + a.n) * 100);
+      s += ln(xl, cy2, xr, cy2, 'h-halo') + ln(xl, cy2, xr, cy2, 'h-hlx');
+      s += tri(cy2, 'h-hlmark') + tx(mx, cy2 - 7, '일치', 'start', ts, 'h-hltxt');
     }
     // 경계선
     s += ln(o.ix, o.top, o.ix, o.bot, 'h-iface');
@@ -401,12 +453,10 @@
     s += pth(bd, '', gf('grain'));
     s += pth('M' + (BX0 + 7) + ' ' + (BT + 9) + ' Q' + (BX0 + 7) + ' ' + (BT + 1.5) + ' ' + (BX0 + 15) + ' ' + (BT + 1.5) +
              ' H' + (BX1 - 18) + ' Q' + (BX1 - 7) + ' ' + (BT + 1.5) + ' ' + (BX1 - 7) + ' ' + (BT + 12), 'h-shine');
-    // 앞면 손잡이 홈(오목한 곡면)
-    const gx0 = SR + 18, gx1 = BX1 - 12, gy0 = BT + 10, gy1 = PL - 6;
-    s += pth('M' + gx0 + ' ' + gy0 + ' Q' + ((gx0 + gx1) / 2) + ' ' + (gy0 + 7) + ' ' + gx1 + ' ' + gy0 +
-             ' V' + gy1 + ' H' + gx0 + ' Z', 'h-shadefill');
-    s += ln(gx0, gy1 + 0.5, gx1, gy1 + 0.5, 'h-shine');
-    if (full) s += tx((gx0 + gx1) / 2, gy1 - 4, '베이스', 'middle', 10, 'h-lbl');
+    // 베이스 앞면 학교 각인(로고 + 문구). 본척 눈금(x ≤ CX1)을 피해 오른쪽에 새김
+    const no = L.npOv;
+    s += engravingH(no.x, no.top, no.em, no.font, no.text);
+    if (full) s += tx(BX1 - 8, OV_YB - 3.5, '베이스', 'end', 8, 'h-lbl');
     s += rc(CX0 - 5, BT - 5, CX1 - CX0 + 10, 7, 'h-mtl', gf('gMetalV') + ' rx="1.5"');
 
     // 기둥(본척, 연삭 크롬 빔) + 꼭대기 캡 + 상단 노브
@@ -425,10 +475,6 @@
       if (big && m <= 300) s += tx(CX0 - 5, sy + 4 * F, String(m / 10), 'end', 11 * F);   // cm
     }
     s += tx(BX0 - 3, OV_YB - 2, '0', 'end', 11 * F);
-
-    // 학교 명판: 빔 오른쪽 위(슬라이더·노브가 지나가지 않는 고정 영역)
-    const no = L.npOv;
-    s += nameplate(no.cx, no.top, no.w, no.em, no.font, no.text).s;
 
     // ---- 움직이는 부분: 슬라이더(부척 창), 미세이송 나사, 클램프 노브 2개, 스크라이버 조 ----
     const sb = ovY(y);
@@ -504,7 +550,7 @@
     const a = answer(state);
     ans.innerHTML = '<div class="gw-value">' + a.value + ' mm</div>' +
       '<div>' + a.text + '</div>' +
-      '<div class="gw-note">' + a.detail + ' (그림에 초록색으로 표시)</div>' +
+      '<div class="gw-note">' + a.detail + ' (확대 창: <b style="color:var(--hl)">빨간 굵은 선</b> = 본척과 부척 눈금이 일치하는 선, <b style="color:var(--rd)">파란 선</b> = 읽은 본척 눈금)</div>' +
       '<div class="gw-note">※ 하이트게이지는 숫자가 위로 커지므로 부척 0점 바로 <b>아래</b> 본척 눈금을 읽습니다. 위쪽 눈금을 읽으면 1mm 크게 나옵니다.</div>' +
       '<div class="gw-note">※ 본척 숫자는 cm 단위(1 = 10mm)이고, 작은 눈금 1칸은 1mm입니다. 정답은 mm로 씁니다.</div>';
     revealed = true;

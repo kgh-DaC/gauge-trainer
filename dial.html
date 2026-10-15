@@ -180,22 +180,39 @@
     el('feDropShadow', { dx: 0, dy: 4, stdDeviation: 4, 'flood-color': '#000', 'flood-opacity': .35 }, f2);
     const cp = el('clipPath', { id: P + 'cFace' }, d);
     el('circle', { cx: CX, cy: CY, r: R_FACE }, cp);
+    brandDefs(d);
   }
 
-  // ---- 학교 로고 + 문구 (모든 측정기 공통 스타일: 엠블럼 위, 2줄 문구 아래, 남색 #1d3557 굵은 글씨) ----
-  // 엠블럼만 보이도록 로고(312x312)의 위쪽 0~175px만 nested svg viewBox로 잘라 씀
+  // ---- 학교 로고 + 문구: 문자판에 '인쇄·각인'된 느낌 (모든 측정기 공통 각인 스타일) ----
+  // 엠블럼: 로고(312x312, 흰 배경 jpg)의 위쪽 0~175px만 nested svg viewBox로 잘라 쓰고,
+  //   feColorMatrix로 밝기→알파 변환(밝은 픽셀은 투명, 색은 원색 유지)해 흰 사각 배경을 없앤다.
+  // 문구: 짙은 청회색 + 약한 각인(위쪽 어두운 1px / 아래쪽 밝은 1px 하이라이트)
   const BRAND_LINES = ['한국폴리텍대학 광주캠퍼스', '기계시스템과'];
+  const BRAND_INK = '#2f4558';
+  function brandDefs(defs) {
+    // alpha = 8.4 - 3*(R+G+B): R+G+B >= 2.8(거의 흰색)이면 0, <= 2.47이면 1(불투명)
+    const fk = el('filter', { id: P + 'fKeyWhite', x: 0, y: 0, width: 1, height: 1, 'color-interpolation-filters': 'sRGB' }, defs);
+    el('feColorMatrix', { type: 'matrix', values: '1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  -3 -3 -3 0 8.4' }, fk);
+    // 인쇄 잉크가 문자판에 살짝 눌린 느낌: 아래쪽에 아주 옅은 밝은 테
+    el('feDropShadow', { dx: 0, dy: .5, stdDeviation: .15, 'flood-color': '#ffffff', 'flood-opacity': .55 }, fk);
+  }
   function drawBrand(parent, cx, top, w, fs) {
-    const g = el('g', { class: 'gw-brand', 'pointer-events': 'none' }, parent);
+    const g = el('g', { class: 'gw-brand', 'pointer-events': 'none', 'aria-hidden': 'true' }, parent);
     const h = w * 175 / 312;
     const box = el('svg', { x: cx - w / 2, y: top, width: w, height: h, viewBox: '0 0 312 175',
       preserveAspectRatio: 'xMidYMid meet', overflow: 'hidden' }, g);
-    el('image', { href: LOGO, x: 0, y: 0, width: 312, height: 312, style: 'mix-blend-mode:multiply' }, box);
+    el('image', { href: LOGO, x: 0, y: 0, width: 312, height: 312, filter: url('fKeyWhite'), opacity: .92 }, box);
+    const font = '"Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif';
+    const px = .75;                            // 화면 약 1px(viewBox 400 → 표시 폭 약 520px)
     BRAND_LINES.forEach(function (t, i) {
-      const tx = el('text', { x: cx, y: top + h + fs * (1.15 + i * 1.25), 'text-anchor': 'middle',
-        'font-size': fs, 'font-weight': 700, fill: '#1d3557', 'letter-spacing': '0.02em',
-        'font-family': '"Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif' }, g);
-      tx.textContent = t;
+      const y = top + h + fs * (1.15 + i * 1.25);
+      // 각인 3겹: 위쪽 어두운 그림자 → 아래쪽 밝은 하이라이트 → 본 글자
+      [[-px, '#0b1620', .35], [px, '#ffffff', .9], [0, BRAND_INK, 1]].forEach(function (L) {
+        const tx = el('text', { x: cx, y: y + L[0], 'text-anchor': 'middle',
+          'font-size': fs, 'font-weight': 700, fill: L[1], 'fill-opacity': L[2], 'letter-spacing': '0.02em',
+          'font-family': font }, g);
+        tx.textContent = t;
+      });
     });
     return g;
   }
