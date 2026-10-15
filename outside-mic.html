@@ -28,6 +28,9 @@
   .gw-zcap { flex:1 1 220px; font-size:.9em; color:var(--muted); }
   .gw-zcap b { color:var(--fg); }
   .gw-zcap p { margin:0 0 6px; }
+  .gw-zcap b.gw-cr { color:#e3001b; }
+  .gw-zcap b.gw-cb { color:#0550ae; }
+  @media (prefers-color-scheme: dark) { .gw-zcap b.gw-cr { color:#ff4d4d; } .gw-zcap b.gw-cb { color:#58a6ff; } }
   .gw-bar { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; align-items:center; }
   button { font:inherit; padding:8px 14px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--fg); cursor:pointer; }
   button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
@@ -170,7 +173,7 @@
   function yMain(u10) { return BY - R * Math.sin(u10 * U10); }
   function yZoom(u10) { return ZGEO[mode].Y0 - ZU * u10; }
 
-  let q = 0, drawn = false;
+  let q = 0, drawn = false, revealed = false;   // revealed: 정답확인 상태(일치선 강조 표시)
   let root, svg, zsvg, ans, dyn, zdyn, titleEl, btnN, btnV, zcapV, zcap1;
 
   function el(tag, attrs, parent) {
@@ -207,7 +210,7 @@
         '<svg class="gw-zsvg" id="' + ID + '-zsvg" tabindex="0" role="application" aria-label="확대 창: 위/아래로 끌어 심블 돌리기"></svg>' +
         '<div class="gw-zcap"><p><b>확대 창</b> (전체 그림의 점선 영역을 펼쳐서 크게 그림) — 여기서 끌어도 심블이 움직입니다.</p>' +
           '<p id="' + ID + '-zcap1"></p>' +
-          '<p id="' + ID + '-zcapv">③ 심블 눈금선과 <b>한 줄로 이어지는</b> 슬리브 부척 선 번호 × 0.001mm (부척 10칸 = 심블 9칸). 0과 10이 함께 맞으면 0.</p></div>' +
+          '<p id="' + ID + '-zcapv">③ 심블 눈금선과 <b>한 줄로 이어지는</b> 슬리브 부척 선 번호 × 0.001mm (부척 10칸 = 심블 9칸). 0과 10이 함께 맞으면 0. <b>정답확인</b>을 누르면 확대 창에 <b class="gw-cr">일치선</b>을 굵은 빨간 선으로, 읽은 슬리브·심블 눈금을 <b class="gw-cb">파란 선</b>으로 표시합니다.</p></div>' +
       '</div>' +
       '<div class="gw-bar">' +
         '<button class="primary" id="' + ID + '-reveal">정답확인</button>' +
@@ -525,6 +528,8 @@
     }
     el('line', { x1: ZEX, y1: 0, x2: ZEX, y2: H, stroke: '#3b444d', 'stroke-width': 2 }, g);   // 심블 앞단
 
+    if (revealed && mode === 'vernier') drawZoomMatch(g, Y0, ZT);
+
     // 머리띠 (눈금 위에 덮어 글자 겹침 방지)
     el('rect', { x: 0, y: 0, width: ZW, height: 26, fill: '#c9d1d8' }, g);
     el('line', { x1: 0, y1: 26, x2: ZW, y2: 26, stroke: '#8c959e' }, g);
@@ -532,6 +537,51 @@
     h1.textContent = mode === 'vernier' ? '부척 · 슬리브' : '슬리브 (기선 위 1mm · 아래 0.5mm)';
     const h2 = el('text', { x: ZW - 8, y: 19, 'text-anchor': 'end', 'font-size': 14.5, 'font-weight': 700, fill: '#2b3137', 'font-family': FONT }, g);
     h2.textContent = '심블 ×0.01mm';
+  }
+
+  // 정답확인 상태(버니어 모드)에서만: 읽은 슬리브 눈금·심블 눈금(파랑) + 부척·심블 일치선(굵은 빨강)
+  //  일치하는 부척 선 번호 k = q mod 10 (answer().k). 부척 j번 선 y = yZoom(9j), 심블 눈금 y = yZoom(10v - r).
+  //  j = k 이면 9k + r ≡ 0 (mod 10)이므로 u10 = 9k인 심블 눈금이 반드시 있고, 같은 정수 인자로 y가 정확히 같다.
+  //  k = 0이면 0번(기선)과 10번 선이 함께 일치하므로 둘 다 표시한다.
+  function drawZoomMatch(g, Y0, ZT) {
+    const RED = '#e3001b', BLUE = '#0550ae', HALO = '#ffffff';
+    const a = answer(q, 'vernier'), k = a.k;
+    const r = q % 500;
+    const hg = el('g', { class: 'match-g' }, g);
+    const lbl = function (x, y, s, size, color, anchor, extra) {
+      const t = el('text', Object.assign({ x: x, y: y, 'text-anchor': anchor, 'font-size': size, 'font-weight': 700, fill: color,
+        stroke: HALO, 'stroke-width': 4, 'stroke-opacity': 0.9, 'paint-order': 'stroke', 'font-family': FONT }, extra || {}), hg);
+      t.textContent = s;
+      return t;
+    };
+    // (1) 읽은 슬리브 눈금(마지막으로 보이는 눈금, 기선 아래) — 파랑
+    const tR = Math.floor(q / 500) * 500;
+    const xs = ZEX - (q - tR) * ZS / 1000;
+    const lenS = tR % 1000 === 0 ? ((tR / 1000) % 5 === 0 ? ZT.five : ZT.mm) : ZT.half;
+    el('line', { x1: xs, y1: Y0, x2: xs, y2: Y0 + lenS + 6, stroke: HALO, 'stroke-opacity': 0.85, 'stroke-width': 6 }, hg);
+    el('line', { class: 'read-sl', 'data-t': tR, x1: xs, y1: Y0, x2: xs, y2: Y0 + lenS + 6, stroke: BLUE, 'stroke-width': 3.4 }, hg);
+    lbl(xs + 4, Y0 + 92, '슬리브 ' + (tR % 1000 === 0 ? String(tR / 1000) : Math.floor(tR / 1000) + '.5') + 'mm', 14, BLUE, 'end');
+    // (2) 기선을 지난 심블 눈금 n (u10 = 10n - r = -k) — 파랑
+    const yT = yZoom(10 * a.n - r);
+    const lenT = a.n % 5 === 0 ? 50 : 32;
+    el('line', { x1: ZEX, y1: yT, x2: ZEX + lenT + 4, y2: yT, stroke: HALO, 'stroke-opacity': 0.85, 'stroke-width': 6 }, hg);
+    el('line', { class: 'read-th', 'data-v': a.n, x1: ZEX, y1: yT, x2: ZEX + lenT + 4, y2: yT, stroke: BLUE, 'stroke-width': 3.4 }, hg);
+    lbl(ZW - 4, yT + 17, '심블 ' + a.n, 13, BLUE, 'end');
+    // (3) 일치선 — 굵은 빨강 + 반투명 흰 테두리 + 접점의 점 + 부척 번호 빨강
+    const js = k === 0 ? [0, 10] : [k];
+    js.forEach(function (j) {
+      const u10 = 9 * j, y = yZoom(u10);
+      const v = (u10 + r) / 10;                       // 정수(위 주석 참고)
+      const lenM = (((v % 50) + 50) % 50) % 5 === 0 ? 50 : 32;
+      el('line', { x1: ZLAB, y1: y, x2: ZEX + lenM + 4, y2: y, stroke: HALO, 'stroke-opacity': 0.85, 'stroke-width': 8.5 }, hg);
+      el('line', { class: 'match-line', 'data-j': j, 'data-u10': u10, 'data-k': k, x1: ZLAB, y1: y, x2: ZEX + lenM + 4, y2: y,
+        stroke: RED, 'stroke-width': 5, 'stroke-linecap': 'butt' }, hg);
+      el('circle', { cx: ZEX, cy: y, r: 5.5, fill: RED, stroke: HALO, 'stroke-width': 1.5 }, hg);
+      const nt = el('text', { x: ZLAB - 4, y: y + 5, 'text-anchor': 'end', 'font-size': 15, 'font-weight': 800, fill: RED, 'font-family': FONT }, hg);
+      nt.textContent = j;
+    });
+    const yL = yZoom(9 * js[js.length - 1]);
+    lbl((ZLAB + ZEX) / 2 + 6, yL - 9, k === 0 ? '일치선 (부척 0·10번 → 0)' : '일치선 (부척 ' + k + '번)', 15, RED, 'middle', { class: 'match-tag' });
   }
 
   function updateModeUI() {
@@ -548,8 +598,8 @@
 
   function setMode(m) {
     if (m !== 'normal' && m !== 'vernier') return;
-    closeAnswer();                           // 모드 전환 시 정답 패널은 항상 닫는다
-    if (m === mode) return;
+    const was = closeAnswer();               // 모드 전환 시 정답 패널은 항상 닫는다(강조도 해제)
+    if (m === mode) { if (was) drawZoom(); return; }
     mode = m;
     q = snapQ(q, mode);                      // 일반 모드로 돌아오면 0.01mm 단위로 맞춤
     updateModeUI();
@@ -611,7 +661,12 @@
     });
   }
 
-  function closeAnswer() { if (ans) { ans.classList.remove('open'); ans.innerHTML = ''; } }
+  function closeAnswer() {                 // 닫기 전에 정답확인 상태였는지 반환
+    const was = revealed;
+    revealed = false;
+    if (ans) { ans.classList.remove('open'); ans.innerHTML = ''; }
+    return was;
+  }
 
   function setState(v) {
     const next = snapQ(v, mode);
@@ -623,13 +678,15 @@
   }
 
   function reveal() {
-    if (ans.classList.contains('open')) { closeAnswer(); return; }
+    if (ans.classList.contains('open')) { closeAnswer(); drawZoom(); return; }
     const a = answer(q, mode);
     let hint = '';
     if (a.nearHalf) hint += '<div class="gw-hint">0.5mm 눈금이 심블 앞단 밖으로 보이는지 먼저 확인하세요.</div>';
     if (a.vernierZero) hint += '<div class="gw-hint">부척 0번과 10번 선이 함께 일치하면 0.001mm 자리는 0입니다.</div>';
     ans.innerHTML = '<div class="gw-value">' + a.display + '</div><div>' + a.text + '</div>' + hint;
     ans.classList.add('open');
+    revealed = true;
+    drawZoom();                              // 버니어 모드면 확대 창에 일치선 강조
     try {
       const r = ans.getBoundingClientRect();
       const vh = window.innerHeight || document.documentElement.clientHeight;

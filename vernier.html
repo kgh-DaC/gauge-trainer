@@ -96,7 +96,8 @@
 
   // ---- 옵션 (명세 1절). MAX = 150mm − SPAN − TAIL − MARGIN : 슬라이더가 148mm를 넘지 않도록 ----
   const OPTS = {
-    '20': { key: '20', label: '1/20 (0.05mm)', STEP: 5, DIV: 20, SPAN: 1900, RES: '0.05', NUM_EVERY: 2, MAX: 12500 },
+    // 1/20형: 본척 39mm를 20등분 (부척 1칸 1.95mm = 2mm − 0.05mm), 1/50형: 본척 49mm를 50등분 (0.98mm = 1mm − 0.02mm)
+    '20': { key: '20', label: '1/20 (0.05mm)', STEP: 5, DIV: 20, SPAN: 3900, RES: '0.05', NUM_EVERY: 2, MAX: 10500 },
     '50': { key: '50', label: '1/50 (0.02mm)', STEP: 2, DIV: 50, SPAN: 4900, RES: '0.02', NUM_EVERY: 5, MAX: 9500 }
   };
   let opt = OPTS['20'];                  // 기본: 1/20형
@@ -106,7 +107,9 @@
   let state = 0, last = -1, revealed = false;
 
   // ---- 명세 함수 ----
-  function pitch() { return opt.SPAN / opt.DIV; }        // 95 또는 98 (정수)
+  function pitch() { return opt.SPAN / opt.DIV; }        // 195 또는 98 (정수)
+  // 부척 n번째 선과 일치하는 본척 선(mm) = 본척 읽기 M + n × (P + STEP)/100  (1/20형: M+2n, 1/50형: M+n)
+  function matchMain(o) { o = o || opt; return (o.SPAN / o.DIV + o.STEP) / 100; }
   function fmt(u) { return Math.floor(u / 100) + '.' + String(u % 100).padStart(2, '0'); }
   function gwa(k) { return [0, 1, 3, 6, 7, 8].indexOf(k % 10) >= 0 ? '과' : '와'; }   // 받침 유무에 따른 조사
   function answer(s, o) {
@@ -128,7 +131,7 @@
   }
   function randInt(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
   function randomState() {
-    const MX = opt.MAX / 100;            // 125 또는 95 (mm)
+    const MX = opt.MAX / 100;            // 105 또는 95 (mm)
     let s;
     do {
       const r = Math.random();
@@ -533,7 +536,7 @@
         z += line(xm, 100 - lm - 8, 100, 4.6, 'gw-halo') + line(xm, 100 - lm - 8, 100, 2.8, 'gw-read', ' data-read="' + a.M + '"');
         z += tag(xm, 15, '본척 ' + a.M + 'mm', 14, 'gw-tagb');
       }
-      const mc = a.M + a.n, xc = zx(mc * 100);   // = zx(state + n×P): 정수 계산상 정확히 같은 x
+      const mc = a.M + a.n * matchMain(), xc = zx(mc * 100);   // = zx(state + n×P): 정수 계산상 정확히 같은 x
       if (xc > -5 && xc < ZW + 5) {
         const lt = mc % 10 === 0 ? 42 : (mc % 5 === 0 ? 30 : 20), lb = a.n % opt.NUM_EVERY === 0 ? 34 : 20;
         // 숫자(본척 cm 숫자 y≈27~46, 부척 숫자 y≈145~160)를 가리지 않는 범위에서 길게
