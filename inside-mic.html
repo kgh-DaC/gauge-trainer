@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>내측마이크로미터 눈금읽기</title>
+<style>
+  :root { --bg:#fff; --fg:#1f2328; --muted:#656d76; --line:#d0d7de; --accent:#0969da; --ok:#1a7f37; --badge:#cf222e;
+          --mHi:#ffffff; --mMid:#d3d8de; --mLo:#8e97a1; --mEdge:#4b535c;
+          --grip:#9aa2ab; --gripHi:#e9ecef; --knurl:#59616b;
+          --work:#c4b296; --workEdge:#8a7558; --tick:#1f2328; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --line:#30363d; --accent:#4493f8; --ok:#3fb950; --badge:#f85149;
+          --mHi:#9aa3ad; --mMid:#59616b; --mLo:#2a3038; --mEdge:#11151a;
+          --grip:#3a424c; --gripHi:#7d8691; --knurl:#1b1f24;
+          --work:#5c4d3a; --workEdge:#8a7558; --tick:#f0f3f6; } }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, "Malgun Gothic", sans-serif; }
+  .gw-svg { width:100%; height:auto; max-width:900px; max-height:max(320px, calc(100vh - 230px)); margin:0 auto;
+            touch-action:none; user-select:none; -webkit-user-select:none; display:block; }
+  .gw-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .gw-head h2 { margin:0; font-size:1.25em; }
+  .gw-badge { display:inline-block; padding:2px 10px; border-radius:999px; background:var(--badge); color:#fff; font-weight:700; font-size:.9em; }
+  .gw-sub { color:var(--muted); font-size:.9em; margin:4px 0 8px; }
+  .gw-bar { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; align-items:center; }
+  .gw-opt { display:flex; gap:6px; flex-wrap:wrap; align-items:center; font-size:.9em; color:var(--muted); }
+  button { font:inherit; padding:8px 14px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--fg); cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.on { border-color:var(--accent); color:var(--accent); font-weight:600; }
+  .gw-opt button { padding:4px 10px; }
+  .gw-zoombox { border:1px solid var(--line); border-radius:8px; padding:8px; margin:8px auto 0; max-width:880px; box-sizing:border-box; }
+  .gw-zoomhead { font-size:.9em; color:var(--muted); margin-bottom:6px; }
+  .gw-zsvg { width:100%; height:auto; max-height:min(460px, 60vh); display:block; margin:0 auto; touch-action:none; user-select:none; -webkit-user-select:none; }
+  @media (max-width: 600px) {
+    body { padding:10px; }
+    .gw-head h2 { font-size:1.1em; }
+    .gw-sub { font-size:.85em; }
+    .gw-zoombox { padding:4px; }
+    .gw-zoomhead { font-size:.82em; }
+    .gw-bar button { flex:1 1 0; }
+  }
+  .gw-answer { display:none; padding:12px; border:1px solid var(--ok); border-radius:8px; }
+  .gw-answer.open { display:block; }
+  .gw-value { font-size:1.6em; font-weight:700; color:var(--ok); }
+  .gw-hint { color:var(--muted); font-size:.85em; margin-top:6px; }
+  /* SVG 색 */
+  .s-edge { stroke:var(--mEdge); stroke-width:1.2; }
+  .s-work { fill:var(--work); stroke:var(--workEdge); stroke-width:1.2; }
+  .s-tick { stroke:var(--tick); stroke-width:1.4; }
+  .s-thin { stroke:var(--tick); stroke-width:1.1; }
+  .s-txt { fill:var(--tick); font:700 12px system-ui, "Malgun Gothic", sans-serif; }
+  .s-txt-s { fill:var(--tick); font:700 10.5px system-ui, "Malgun Gothic", sans-serif; }
+  .s-muted { fill:var(--muted); font:12px system-ui, "Malgun Gothic", sans-serif; }
+  .s-engr { fill:var(--mEdge); font:600 10px system-ui, sans-serif; }
+  .s-dim { stroke:var(--accent); stroke-width:1.2; fill:none; }
+  .s-dimtxt { fill:var(--accent); font:600 12px system-ui, "Malgun Gothic", sans-serif; }
+  .s-knurl { stroke:var(--knurl); stroke-width:1; }
+  .s-grab { cursor:ns-resize; }
+  .s-grabx { cursor:ew-resize; }
+</style>
+</head>
+<body>
+<div id="gw-root"></div>
+<script>
+(function () {
+  const ID = 'inside-mic';
+  const TITLE = '내측마이크로미터';
+
+  // ---- 명세 상수 ----
+  const O_UM = 5000;                 // 측정 범위 시작값 5mm (슬리브 숫자에 포함되어 새겨짐)
+  const STATE_MIN = 0, STATE_MAX = 2500, STEP = 1;   // p: 1 = 0.01mm, V = 5 + p/100
+  const BOUNDARY_RATE = 0.25;        // 명세 4절: 출제의 약 25%는 경계값 풀
+
+  // ---- 상태: 정수 하나 (p) + 드래그 중 부드러운 표시용 실수 ----
+  let p = 0, pView = 0, lastP = -1;
+
+  // ---- 명세 함수: p → 읽기 값 / 정답 (정수 연산) ----
+  // 반전 눈금 읽기: 심블이 오른쪽부터 눈금을 덮어 간다. 눈금 m 은 V >= m 이면 가려짐.
+  //  B = 심블 앞단 바로 왼쪽에 보이는 1mm 눈금 = floor(V) + 1
+  //  기본 mm = B - 1, 0.5mm 눈금(B - 0.5)이 가려져 있으면 +0.5, 심블 눈금 × 0.01
+  function readParts(s) {
+    const sleeveMm = Math.floor(s / 100);           // zero-based (내부용)
+    const sleeveNum = sleeveMm + O_UM / 1000;       // = B - 1
+    const visibleB = sleeveNum + 1;                 // 보이는 가장 가까운 1mm 눈금 숫자
+    const half = Math.floor(s / 50) % 2;            // 1 이면 B-0.5 눈금이 가려짐
+    const thimble = s % 50;
+    const headUm = sleeveMm * 1000 + half * 500 + thimble * 10;   // == s*10
+    return { sleeveMm: sleeveMm, sleeveNum: sleeveNum, visibleB: visibleB, half: half, thimble: thimble, headUm: headUm };
+  }
+  function answer(s) {
+    const r = readParts(s);
+    const answerUm = O_UM + r.headUm;
+    const ansStr = (answerUm / 1000).toFixed(2);
+    const halfStr = r.half ? '0.5' : '0';
+    const text = '슬리브 ' + r.sleeveNum + 'mm [보이는 눈금 ' + r.visibleB + '에서 1을 뺌] + ' + halfStr +
+      'mm' + (r.half ? ' [' + (r.visibleB - 0.5) + ' 눈금이 가려짐]' : ' [' + (r.visibleB - 0.5) + ' 눈금이 보임]') +
+      ' + 심블 ' + r.thimble + '×0.01mm = ' + ansStr + 'mm';
+    return { answerUm: answerUm, valueMm: answerUm / 1000, valueStr: ansStr, text: text, parts: r };
+  }
+
+  // ---- 무작위 출제 ----
+  const BOUNDARY_POOL = (function () {
+    const set = new Set([0, 1, 49, 50, 51, 99, 100, 101, 149, 150, 151, 2449, 2450, 2451, 2499, 2500]);
+    for (let k = 1; k <= 50; k++) [k * 50 - 1, k * 50, k * 50 + 1].forEach(function (v) {
+      if (v >= STATE_MIN && v <= STATE_MAX) set.add(v);
+    });
+    return Array.from(set).sort(function (a, b) { return a - b; });
+  })();
+  function randomState() {
+    let s;
+    do {
+      if (Math.random() < BOUNDARY_RATE) s = BOUNDARY_POOL[Math.floor(Math.random() * BOUNDARY_POOL.length)];
+      else s = STATE_MIN + STEP * Math.floor(Math.random() * ((STATE_MAX - STATE_MIN) / STEP + 1));
+    } while (s === lastP);
+    return s;
+  }
+
+  // ---- 그림 상수 (SVG 좌표) ----
+  // 사진(미쓰토요 5-30mm) 기준 배치:
+  //  [이동 조 블록(핀) + 로드] ← 심블과 함께 왼쪽으로 이동
+  //  [고정 조 블록(핀)][슬리브: 30 25 20 15 10 5 (화면 고정)][심블][래칫] ← 심블+래칫 왼쪽으로 이동
+  // 심블 앞단 x = xOf(V) + EDGE_GAP. 눈금 m 은 V >= m 이면 가려짐(그리지 않음), V < m 이면 보임.
+  const VB_X = 0, VB_Y = 50, VB_W = 1000, VB_H = 290;
+  const PX_MM = 11;                   // 1mm 당 px (슬리브·조 공통 → 로드로 연결된 움직임이 일치)
+  const AXIS_Y = 230;                 // 슬리브 기선
+  const X5 = 766;                     // 슬리브 '5' 눈금 x
+  const SCALE_MAX = 31;               // 30 왼쪽에 1mm 여유 눈금(31, 숫자 없음): V=30.00 에서도 B=31 이 보임
+  const EDGE_GAP = 1.2;               // 심블 앞단을 V 위치보다 오른쪽으로: V=m-0.01 일 때 눈금 m 이 앞단 왼쪽에 온전히 보임
+  const R0 = 400;                     // 고정 조 핀 바깥 측정면(오른쪽 면) x
+  const PIN_W = 7, PIN_TOP = 96, EAR_Y = 150, BLK_TOP = 190, BLK_BOT = 270;
+  const SL_X0 = R0 + 70;              // 슬리브 시작(고정 블록 오른쪽)
+  const SL_TOP = AXIS_Y - 28, SL_BOT = AXIS_Y + 28;
+  const TH_W = 104, RAT_W = 52, TH_R = 58, TH_TOP = AXIS_Y - TH_R, TH_BOT = AXIS_Y + TH_R;
+  const PX_PER_DIV = TH_R * 2 * Math.PI / 50;   // 기선 부근 심블 눈금 간격(px)
+  function xOf(mm) { return X5 - (mm - 5) * PX_MM; }
+
+  let root, svg, ans, gDyn, zSvg;
+  function isNarrow() { return !!root && root.clientWidth > 0 && root.clientWidth < 600; }
+  function el(id) { return root.querySelector('#' + ID + '-' + id); }
+
+  function defs() {
+    function cyl(id, hi, mid, lo) {   // 원통(세로 방향 음영)
+      return '<linearGradient id="' + ID + '-' + id + '" x1="0" y1="0" x2="0" y2="1">' +
+        '<stop offset="0" style="stop-color:var(' + lo + ')"/>' +
+        '<stop offset=".25" style="stop-color:var(' + hi + ')"/>' +
+        '<stop offset=".55" style="stop-color:var(' + mid + ')"/>' +
+        '<stop offset=".88" style="stop-color:var(' + lo + ')"/>' +
+        '<stop offset="1" style="stop-color:var(' + mid + ')"/></linearGradient>';
+    }
+    return '<defs>' +
+      cyl('gCyl', '--mHi', '--mMid', '--mLo') +
+      cyl('gGrip', '--gripHi', '--grip', '--mLo') +
+      '<linearGradient id="' + ID + '-gBlock" x1="0" y1="0" x2="1" y2="1">' +
+        '<stop offset="0" style="stop-color:var(--mHi)"/><stop offset=".6" style="stop-color:var(--mMid)"/>' +
+        '<stop offset="1" style="stop-color:var(--mLo)"/></linearGradient>' +
+      '<linearGradient id="' + ID + '-gPin" x1="0" y1="0" x2="1" y2="0">' +
+        '<stop offset="0" style="stop-color:var(--mLo)"/><stop offset=".45" style="stop-color:var(--mHi)"/>' +
+        '<stop offset="1" style="stop-color:var(--mLo)"/></linearGradient>' +
+      '<pattern id="' + ID + '-knurl" width="6" height="6" patternUnits="userSpaceOnUse">' +
+        '<path class="s-knurl" d="M0 0 L6 6 M6 0 L0 6" fill="none"/></pattern>' +
+      '<filter id="' + ID + '-sh" x="-5%" y="-5%" width="110%" height="120%">' +
+        '<feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity=".22"/></filter>' +
+      '</defs>';
+  }
+
+  function mount(container) {
+    root = container;
+    container.innerHTML =
+      '<div class="gw-head"><h2>' + TITLE + ' (캘리퍼형)</h2><span class="gw-badge">내측</span></div>' +
+      '<div class="gw-sub">측정 범위 5.00 ~ 30.00 mm · 최소 눈금 0.01 mm · 슬리브 숫자는 심블 쪽(오른쪽) 5부터 왼쪽으로 커지고, ' +
+        '값이 커질수록 심블이 왼쪽으로 가며 눈금을 덮습니다. 심블을 위아래로(미세) 또는 좌우로(빠르게) 끌거나 왼쪽 조를 끄세요. 마우스 휠도 됩니다.</div>' +
+      '<svg class="gw-svg" id="' + ID + '-svg" viewBox="' + VB_X + ' ' + VB_Y + ' ' + VB_W + ' ' + VB_H + '" role="img" aria-label="내측마이크로미터 전체 모습">' +
+        defs() + '<g id="' + ID + '-dyn"></g></svg>' +
+      '<div class="gw-zoombox"><div class="gw-zoomhead">확대 창 — 심블 앞단 왼쪽에 보이는 눈금과 기선에 맞는 심블 눈금을 읽으세요. 여기서 끌어도 움직입니다.</div>' +
+        '<svg class="gw-zsvg" id="' + ID + '-z" viewBox="0 0 280 120" role="img" aria-label="심블 앞단 확대"></svg></div>' +
+      '<div class="gw-bar"><button class="primary" id="' + ID + '-reveal">정답확인</button>' +
+      '<button id="' + ID + '-new">새 문제</button></div>' +
+      '<div class="gw-answer" id="' + ID + '-ans"></div>';
+    svg = el('svg'); ans = el('ans'); gDyn = el('dyn'); zSvg = el('z');
+    el('reveal').onclick = reveal;
+    el('new').onclick = newProblem;
+    // 화면 폭이 바뀌면(휴대폰 회전 등) 확대 창 범위를 다시 정한다
+    let lastNarrow = null;
+    function onResize() { const n = isNarrow(); if (n !== lastNarrow) { lastNarrow = n; draw(); } }
+    if (window.ResizeObserver) new ResizeObserver(onResize).observe(container);
+    else window.addEventListener('resize', onResize);
+    bindDrag(svg);
+    bindDrag(zSvg);
+    newProblem();
+  }
+
+  // ---- 입력 ----
+  function bindDrag(target) {
+    let drag = null;
+    target.addEventListener('pointerdown', function (e) {
+      const kind = e.target.closest && e.target.closest('[data-grab]');
+      if (!kind) return;
+      e.preventDefault();
+      const ctm = target.getScreenCTM();
+      drag = { id: e.pointerId, kind: kind.getAttribute('data-grab'), x: e.clientX, y: e.clientY,
+               p0: pView, scale: ctm ? ctm.a : 1 };
+      try { target.setPointerCapture(e.pointerId); } catch (_) {}
+    });
+    target.addEventListener('pointermove', function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      const dx = (e.clientX - drag.x) / drag.scale;
+      const dy = (e.clientY - drag.y) / drag.scale;
+      let dp;
+      if (drag.kind === 'jaw') dp = -dx / PX_MM * 100;                     // 왼쪽으로 끌면 값 증가
+      else dp = -dy / PX_PER_DIV - dx / PX_MM * 100;                       // 위로/왼쪽으로 끌면 값 증가
+      setView(drag.p0 + dp);
+    });
+    function end(e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      drag = null;
+      setState(pView);
+    }
+    target.addEventListener('pointerup', end);
+    target.addEventListener('pointercancel', end);
+    target.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      const n = (e.deltaY > 0 ? 1 : -1) * (e.shiftKey ? 10 : 1);
+      setState(p + n);
+    }, { passive: false });
+  }
+
+  function clamp(s) { return Math.max(STATE_MIN, Math.min(STATE_MAX, s)); }
+  function closeAnswer() { if (ans) ans.classList.remove('open'); }
+  function setView(s) {           // 드래그 중: 부드럽게 표시, 정답 변수 p도 즉시 반올림 반영
+    pView = clamp(s);
+    p = Math.round(pView / STEP) * STEP;
+    closeAnswer();
+    draw();
+  }
+  function setState(s) {          // 스냅
+    p = clamp(Math.round(s / STEP) * STEP);
+    pView = p;
+    closeAnswer();
+    draw();
+  }
+
+  // ---- 그리기: pView(표시) 하나로만 그린다 ----
+  function f(n) { return Math.round(n * 100) / 100; }
+  function U(id) { return 'url(#' + ID + '-' + id + ')'; }
+  function draw() {
+    const s = pView;
+    const V = 5 + s / 100;                     // 측정값(mm, 표시용 실수)
+    const tE = xOf(V) + EDGE_GAP;              // 심블 앞단
+    const L = R0 - V * PX_MM;                  // 이동 조 핀 바깥 측정면(왼쪽 면)
+    let h = '';
+
+    // 1) 공작물(구멍 단면) — 두 핀 끝의 바깥 면이 구멍 벽에 닿는다
+    h += '<rect class="s-work" x="' + f(L - 46) + '" y="' + (PIN_TOP - 4) + '" width="46" height="40"/>';
+    h += '<rect class="s-work" x="' + R0 + '" y="' + (PIN_TOP - 4) + '" width="46" height="40"/>';
+    h += '<text class="s-muted" x="' + (R0 + 50) + '" y="' + (PIN_TOP + 20) + '">공작물(구멍 단면)</text>';
+    h += '<line class="s-dim" x1="' + f(L) + '" y1="70" x2="' + R0 + '" y2="70"/>';
+    h += '<path class="s-dim" d="M' + f(L) + ' 70 l6 -4 M' + f(L) + ' 70 l6 4 M' + R0 + ' 70 l-6 -4 M' + R0 + ' 70 l-6 4"/>';
+    h += '<line class="s-dim" x1="' + f(L) + '" y1="64" x2="' + f(L) + '" y2="' + (PIN_TOP - 6) + '" stroke-dasharray="2 2"/>';
+    h += '<line class="s-dim" x1="' + R0 + '" y1="64" x2="' + R0 + '" y2="' + (PIN_TOP - 6) + '" stroke-dasharray="2 2"/>';
+    h += '<text class="s-dimtxt" x="' + f((L + R0) / 2) + '" y="62" text-anchor="middle">안지름</text>';
+
+    // 2) 로드(심블과 연결, 이동 조를 민다) — 이동 조 블록과 고정 조 블록 사이에 보임
+    h += '<rect class="s-edge" fill="' + U('gCyl') + '" x="' + f(L + 10) + '" y="' + (AXIS_Y - 9) + '" width="' + f(R0 - 12 - (L + 10)) + '" height="18"/>';
+
+    // 3) 이동 조 블록(드래그 가능): 둥근 보스 + 블록 + 위로 뻗은 핀 + 아래 클램프 나사
+    h += '<g data-grab="jaw" class="s-grabx" filter="' + U('sh') + '">';
+    h += '<rect class="s-edge" fill="' + U('gCyl') + '" x="' + f(L - 66) + '" y="' + (AXIS_Y - 24) + '" width="14" height="48" rx="3"/>';
+    h += '<rect class="s-edge" fill="var(--mMid)" x="' + f(L - 33) + '" y="' + BLK_BOT + '" width="12" height="8"/>';
+    h += '<rect class="s-edge" fill="' + U('gGrip') + '" x="' + f(L - 40) + '" y="' + (BLK_BOT + 8) + '" width="26" height="14" rx="3"/>';
+    h += '<path class="s-edge" fill="' + U('gBlock') + '" d="M' + f(L - 54) + ' ' + BLK_TOP + ' L' + f(L - 34) + ' ' + BLK_TOP +
+         ' L' + f(L - 4) + ' ' + EAR_Y + ' L' + f(L + 12) + ' ' + EAR_Y + ' L' + f(L + 12) + ' ' + BLK_BOT + ' L' + f(L - 54) + ' ' + BLK_BOT + ' Z"/>';
+    h += '<rect class="s-edge" fill="' + U('gPin') + '" x="' + f(L) + '" y="' + PIN_TOP + '" width="' + PIN_W + '" height="' + (EAR_Y - PIN_TOP + 1) + '" rx="1.5"/>';
+    h += '<text class="s-engr" x="' + f(L - 50) + '" y="' + (AXIS_Y - 2) + '">5-30mm</text>';
+    h += '<rect x="' + f(L - 70) + '" y="' + (PIN_TOP - 6) + '" width="90" height="' + (BLK_BOT + 26 - PIN_TOP) + '" fill="transparent"/>';
+    h += '</g>';
+    h += '<text class="s-muted" x="' + f(L - 20) + '" y="' + (BLK_BOT + 42) + '" text-anchor="middle">이동 조</text>';
+
+    // 4) 고정 조 블록 + 핀 (화면 고정)
+    h += '<g filter="' + U('sh') + '">';
+    h += '<path class="s-edge" fill="' + U('gBlock') + '" d="M' + (R0 - 12) + ' ' + EAR_Y + ' L' + (R0 + 4) + ' ' + EAR_Y +
+         ' L' + (R0 + 34) + ' ' + BLK_TOP + ' L' + (SL_X0 + 2) + ' ' + BLK_TOP + ' L' + (SL_X0 + 2) + ' ' + BLK_BOT + ' L' + (R0 - 12) + ' ' + BLK_BOT + ' Z"/>';
+    h += '<rect class="s-edge" fill="' + U('gPin') + '" x="' + (R0 - PIN_W) + '" y="' + PIN_TOP + '" width="' + PIN_W + '" height="' + (EAR_Y - PIN_TOP + 1) + '" rx="1.5"/>';
+    h += '<text class="s-engr" x="' + (R0 + 4) + '" y="' + (BLK_TOP + 18) + '">0.01mm</text>';
+    h += '</g>';
+    h += '<text class="s-muted" x="' + (R0 + 24) + '" y="' + (BLK_BOT + 42) + '" text-anchor="middle">고정 조</text>';
+
+    // 5) 슬리브(화면 고정): 왼→오 30 … 5, 1mm 눈금·숫자는 기선 위, 0.5mm 눈금은 기선 아래
+    // 슬리브 오른쪽 부분은 심블 속으로 들어가 있다(심블 앞단 너머로는 그리지 않음)
+    h += '<rect class="s-edge" fill="' + U('gCyl') + '" x="' + SL_X0 + '" y="' + SL_TOP + '" width="' + f(tE + 8 - SL_X0) + '" height="' + (SL_BOT - SL_TOP) + '"/>';
+    h += '<line class="s-thin" x1="' + f(xOf(SCALE_MAX) - 6) + '" y1="' + AXIS_Y + '" x2="' + f(tE) + '" y2="' + AXIS_Y + '"/>';
+    for (let m = 5; m <= SCALE_MAX; m++) {
+      const x = xOf(m);
+      if (m <= 30 && m % 5 === 0 && x - 9 < tE) h +='<text class="s-txt" x="' + f(x) + '" y="' + (AXIS_Y - 19) + '" text-anchor="middle">' + m + '</text>';
+      if ((m - 5) * 100 <= s) continue;         // V >= m : 심블에 가려짐
+      const len = (m % 5 === 0) ? 15 : 9;
+      h += '<line class="s-tick" data-v="' + m + '" x1="' + f(x) + '" y1="' + AXIS_Y + '" x2="' + f(x) + '" y2="' + (AXIS_Y - len) + '"/>';
+    }
+    for (let m = 5; m < SCALE_MAX; m++) {
+      const hv = m + 0.5, x = xOf(hv);
+      if ((m - 5) * 100 + 50 <= s) continue;    // V >= m+0.5 : 가려짐
+      h += '<line class="s-tick" data-h="' + hv + '" x1="' + f(x) + '" y1="' + AXIS_Y + '" x2="' + f(x) + '" y2="' + (AXIS_Y + 9) + '"/>';
+    }
+
+    // 6) 심블(널링) + 래칫 — 측정값이 커지면 왼쪽으로 이동하며 슬리브를 덮는다
+    h += '<g data-grab="thimble" class="s-grab" filter="' + U('sh') + '">';
+    const gradW = 46;
+    h += '<path class="s-edge" fill="' + U('gCyl') + '" d="M' + f(tE) + ' ' + (TH_TOP + 8) + ' L' + f(tE + gradW) + ' ' + TH_TOP +
+         ' L' + f(tE + gradW) + ' ' + TH_BOT + ' L' + f(tE) + ' ' + (TH_BOT - 8) + ' Z"/>';
+    h += '<rect class="s-edge" fill="' + U('gGrip') + '" x="' + f(tE + gradW) + '" y="' + (TH_TOP - 2) + '" width="' + (TH_W - gradW) + '" height="' + (TH_BOT - TH_TOP + 4) + '" rx="3"/>';
+    h += '<rect fill="' + U('knurl') + '" x="' + f(tE + gradW + 6) + '" y="' + (TH_TOP + 4) + '" width="' + (TH_W - gradW - 12) + '" height="' + (TH_BOT - TH_TOP - 8) + '"/>';
+    h += '<rect fill="' + U('gGrip') + '" opacity=".35" x="' + f(tE + gradW) + '" y="' + (TH_TOP - 2) + '" width="' + (TH_W - gradW) + '" height="' + (TH_BOT - TH_TOP + 4) + '" rx="3"/>';
+    const frac = s % 50;                        // 기선에 오는 심블 눈금(실수)
+    for (let k = 0; k < 50; k++) {
+      let d = k - frac;
+      d = ((d % 50) + 75) % 50 - 25;
+      const th = d * 2 * Math.PI / 50;
+      if (Math.abs(th) > 1.3) continue;
+      const y = AXIS_Y + (TH_R - 6) * Math.sin(th);   // 사진처럼 위에서부터 45, 0, 5 … (아래로 갈수록 커짐)
+      const len = (k % 5 === 0) ? 18 : 11;
+      const op = Math.max(0.2, Math.cos(th)).toFixed(2);
+      h += '<line class="s-thin" data-k="' + k + '" x1="' + f(tE) + '" y1="' + f(y) + '" x2="' + f(tE + len) + '" y2="' + f(y) + '" stroke-opacity="' + op + '"/>';
+      if (k % 5 === 0) h += '<text class="s-txt-s" x="' + f(tE + 22) + '" y="' + f(y + 4) + '" fill-opacity="' + op + '">' + k + '</text>';
+    }
+    const rx0 = tE + TH_W;
+    h += '<rect class="s-edge" fill="' + U('gCyl') + '" x="' + f(rx0) + '" y="' + (AXIS_Y - 20) + '" width="10" height="40"/>';
+    h += '<rect class="s-edge" fill="' + U('gGrip') + '" x="' + f(rx0 + 10) + '" y="' + (AXIS_Y - 30) + '" width="' + (RAT_W - 10) + '" height="60" rx="8"/>';
+    for (let i = 0; i < 7; i++) {
+      const yy = AXIS_Y - 24 + i * 8 + (frac * 1.3) % 8;
+      if (yy > AXIS_Y + 26) continue;
+      h += '<line x1="' + f(rx0 + 13) + '" y1="' + f(yy) + '" x2="' + f(rx0 + RAT_W - 3) + '" y2="' + f(yy) + '" stroke="var(--knurl)" stroke-width="1.6"/>';
+    }
+    h += '</g>';
+    h += '<text class="s-muted" x="' + f(tE + TH_W / 2) + '" y="' + (TH_BOT + 22) + '" text-anchor="middle">심블</text>';
+    h += '<text class="s-muted" x="' + f(rx0 + RAT_W / 2 + 5) + '" y="' + (AXIS_Y + 50) + '" text-anchor="middle">래칫</text>';
+
+    gDyn.innerHTML = h;
+    const kp = svg.querySelector('#' + ID + '-knurl');
+    if (kp) kp.setAttribute('patternTransform', 'translate(' + f(tE) + ' ' + f(-(frac * PX_PER_DIV) % 6) + ')');
+
+    // 확대 창(항상 표시): 심블 앞단 주변(슬리브 눈금 + 기선 + 심블 눈금이 한 곳에서 읽힘)
+    // 좁은 화면(휴대폰)에서는 범위를 좁혀 더 크게 보이게 한다.
+    const narrow = isNarrow();
+    svg.setAttribute('viewBox', narrow ? '0 54 935 282' : (VB_X + ' ' + VB_Y + ' ' + VB_W + ' ' + VB_H));
+    {
+      if (narrow) zSvg.setAttribute('viewBox', f(tE - 128) + ' ' + (AXIS_Y - 61) + ' 190 122');
+      else zSvg.setAttribute('viewBox', f(tE - 196) + ' ' + (AXIS_Y - 61) + ' 280 122');
+      zSvg.innerHTML = h;
+    }
+  }
+
+  function reveal() {
+    const a = answer(p);
+    ans.innerHTML = '<div class="gw-value">' + a.valueStr + ' mm</div><div>' + a.text + '</div>' +
+      '<div class="gw-hint">이 내측마이크로미터는 눈금이 반대 방향입니다. 심블이 오른쪽(5)부터 눈금을 덮어 가므로, 심블 앞단 바로 왼쪽에 보이는 1mm 눈금에서 1을 빼고, ' +
+      '그 오른쪽 0.5mm 눈금(기선 아래)이 가려졌으면 0.5를 더한 뒤 심블 눈금을 더하세요.</div>';
+    ans.classList.toggle('open');
+    if (ans.classList.contains('open') && ans.getBoundingClientRect && ans.scrollIntoView) {
+      const r = ans.getBoundingClientRect();
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      if (r.bottom > vh || r.top < 0) ans.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+  function newProblem() {
+    const s = randomState();
+    setState(s);
+    lastP = p;
+  }
+
+  window.GaugeWidget = { id: ID, title: TITLE, mount: mount, newProblem: newProblem, reveal: reveal,
+                         answer: answer, readParts: readParts, boundaryPool: BOUNDARY_POOL,
+                         _set: function (s) { setState(s); } };
+  document.addEventListener('DOMContentLoaded', function () {
+    const r = document.getElementById('gw-root');
+    if (r) mount(r);
+  });
+})();
+</script>
+</body>
+</html>

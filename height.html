@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>하이트게이지 눈금읽기</title>
+<style>
+  :root { --bg:#fff; --fg:#1f2328; --muted:#656d76; --line:#d0d7de; --accent:#0969da; --ok:#1a7f37; --panel:#fafbfc;
+          /* 금속 그라데이션 색: sc=본척 눈금면(무광 크롬), m=슬라이더·기둥 몸체(크롬강), vn=부척판, b=베이스(주철), p=정반(석정반) */
+          --sc0:#d6dce2; --sc1:#f2f4f6; --m0:#7b848e; --m1:#f6f8fa; --m2:#c4cbd2; --m3:#98a1aa;
+          --vn0:#f1f4f7; --vn1:#d6dde5; --b0:#5c646d; --b1:#9ca4ac; --b2:#3b4148; --p0:#a3a9af; --p1:#767c82;
+          --shine:rgba(255,255,255,0.75); --shade:rgba(0,0,0,0.35); --inv:#f3f5f7; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --line:#30363d; --accent:#4493f8; --ok:#3fb950; --panel:#11161d;
+          --sc0:#252b33; --sc1:#353d47; --m0:#13171c; --m1:#6b7682; --m2:#3e4752; --m3:#272e36;
+          --vn0:#3b4451; --vn1:#2a313b; --b0:#2b3138; --b1:#4f5863; --b2:#16191d; --p0:#3b4046; --p1:#23272c;
+          --shine:rgba(255,255,255,0.22); --shade:rgba(0,0,0,0.55); --inv:#d7dde3; } }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, "Malgun Gothic", sans-serif; }
+  .gw-svg { width:100%; height:auto; max-width:900px; max-height:max(340px, calc(100vh - 230px)); touch-action:none; user-select:none; -webkit-user-select:none; display:block; outline:none; }
+  .gw-svg:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .gw-bar { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; align-items:center; }
+  .gw-help { color:var(--muted); font-size:0.9em; margin:4px 0 8px; }
+  .gw-tag { color:var(--muted); font-size:0.9em; }
+  /* 좁은 배치(휴대폰 세로): 그림이 세로로 길어지므로 높이 제한을 완화 */
+  .gw-narrow .gw-svg { max-height:max(420px, calc(100vh - 150px)); }
+  /* 좁은 화면(휴대폰): 첫 화면에 정답확인 버튼이 들어오도록 위쪽 여백·안내문을 줄인다 */
+  @media (max-width:520px) {
+    body { padding:8px; font-size:15px; }
+    h2.gw-title { font-size:1.15em; }
+    .gw-bar { gap:6px; margin:8px 0; }
+    .gw-bar button { padding:5px 9px; }
+    .gw-help { margin:2px 0 4px; font-size:0.82em; line-height:1.4; }
+  }
+  button { font:inherit; padding:8px 14px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--fg); cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.seg[aria-pressed="true"] { border-color:var(--accent); color:var(--accent); font-weight:700; }
+  .gw-answer { display:none; padding:12px; border:1px solid var(--ok); border-radius:8px; }
+  .gw-answer.open { display:block; }
+  .gw-value { font-size:1.6em; font-weight:700; color:var(--ok); }
+  .gw-note { color:var(--muted); font-size:0.9em; }
+  /* SVG 요소 */
+  .h-panel { fill:var(--panel); stroke:var(--line); }
+  /* 금속 부품: fill은 그라데이션 속성(fill="url(#height-…)")으로 준다. 여기서는 테두리만. */
+  .h-mtl { stroke:var(--shade); stroke-width:0.8; }
+  .h-vplate { stroke:var(--accent); stroke-width:1; }
+  .h-shine { stroke:var(--shine); stroke-width:1; fill:none; }
+  .h-shade { stroke:var(--shade); stroke-width:1; fill:none; }
+  .h-knurl { stroke:var(--shade); stroke-width:0.7; }
+  .h-rod { stroke:var(--m3); stroke-width:2.2; }
+  .h-slot { stroke:var(--shade); stroke-width:1.2; }
+  .h-scr-edge { stroke:var(--accent); stroke-width:1.4; }
+  .h-lbl { fill:var(--muted); font-family:system-ui, "Malgun Gothic", sans-serif; }
+  .h-lbl-inv { fill:var(--inv); font-family:system-ui, "Malgun Gothic", sans-serif; }
+  .h-tick { stroke:var(--fg); stroke-width:1.2; }
+  .h-vtick { stroke:var(--fg); stroke-width:1.2; }
+  .h-hl { stroke:var(--ok); stroke-width:2.6; }
+  .h-thin { stroke-width:0.8; }
+  .h-hl.h-thin { stroke-width:1.4; }
+  .h-scr { stroke:var(--accent); stroke-width:1.5; }
+  .h-txt { fill:var(--fg); font-family:system-ui, "Malgun Gothic", sans-serif; }
+  .h-cap { fill:var(--muted); font-size:13px; font-family:system-ui, "Malgun Gothic", sans-serif; }
+  .h-ind { fill:var(--accent); fill-opacity:0.08; stroke:var(--accent); stroke-dasharray:4 3; }
+  .h-iface { stroke:var(--accent); stroke-width:1; stroke-opacity:0.5; }
+</style>
+</head>
+<body>
+<div id="gw-root"></div>
+<script>
+(function () {
+  const ID = 'height';
+  const TITLE = '하이트게이지';
+
+  // ---- 상태: 1/100mm 정수 ----
+  // 부척은 1/50형(0.02mm) 고정: 본척 49mm를 50등분, 부척 한 칸 0.98mm
+  const STATE_MIN = 0, STATE_MAX = 30000;
+  const resU = 2, N = 50, pitchU = 98, LEN = 49, labelEvery = 5;
+  let state = 0;          // y: 부척 0점(스크라이버 아래 날) 높이
+  let loupeOffU = 200;    // 돋보기 창 중심 = y + loupeOffU (정답과 무관한 고정 기본값)
+  let revealed = false;
+
+  // ---- 명세 함수: 상태 → 정답 (정수 계산, 표시 단계에서만 소수) ----
+  function answer(y) {
+    const r = resU;
+    const M = Math.floor(y / 100);
+    const f = y % 100;
+    const n = f / r;
+    const readingU = M * 100 + n * r;
+    const answerU = readingU;            // 스크라이버 옵셋 미구현(0)
+    const resStr = '0.02';
+    const val = (answerU / 100).toFixed(2);
+    // 표기 전용: 본척 숫자는 cm(10mm마다 0,1,2,…,30), 계산·정답은 mm. 정수 mm에서 바로 만든다.
+    const C = Math.floor(M / 10), rem = M % 10;
+    const mainStr = '본척 ' + C + 'cm(=' + (C * 10) + 'mm)' + (rem ? ' + ' + rem + 'mm' : '');
+    const text = mainStr + ' + 부척 ' + n + '번째 선 × ' + resStr + 'mm = ' + val + 'mm';
+    const detail = n === 0
+      ? '부척 0점 바로 아래 본척 눈금은 ' + lineName(M) + ', 부척 0번째 선(0점이 본척 선과 일치)'
+      : '부척 0점 바로 아래 본척 눈금은 ' + lineName(M) + ', 부척 ' + n + '번째 선이 본척 ' + lineName(M + n) + '과 일치';
+    return { M: M, n: n, answerU: answerU, value: val, text: text, detail: detail };
+  }
+
+  // 본척 선 이름: 숫자(cm)가 적힌 선이면 'Xcm 선(=Ymm)', 아니면 'Xcm 숫자에서 k칸 위 선(=Ymm)' (1칸 = 1mm)
+  function lineName(mm) {
+    const c = Math.floor(mm / 10), k = mm % 10;
+    return k === 0 ? c + 'cm 선(=' + mm + 'mm)' : c + 'cm 숫자에서 ' + k + '칸 위 선(=' + mm + 'mm)';
+  }
+
+  function randInt(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
+  function randomState() {
+    if (Math.random() < 0.2) {
+      const pick = randInt(0, 3);
+      if (pick === 0) return randInt(0, 300) * 100;                       // n = 0
+      if (pick === 1) return randInt(0, 299) * 100 + (N - 1) * resU;      // n = N-1 (x.98)
+      if (pick === 2) return 0;
+      return 30000;
+    }
+    return randInt(0, 30000 / resU) * resU;
+  }
+
+  // ---- 전체 그림 내부 좌표(실물형 하이트게이지, 가로 0~240 / 세로 0~590) ----
+  // 기둥 꼭대기를 372mm까지 그려, y = 300mm에서도 슬라이더·미세이송 블록이 기둥 위에 걸쳐 있게 한다.
+  const OV_X0 = 12, OV_X1 = 236, OV_YB = 566, OV_YT = 32, OV_MAXMM = 372;
+  const CX0 = 70, CX1 = 88;            // 기둥(본척) 좌우
+  const BX0 = 36, BX1 = 160, BH = 30;  // 베이스 좌우·높이
+  const SL = CX0 - 6, SR = CX1 + 30;   // 슬라이더 몸체 좌우
+  const kO = (OV_YB - OV_YT) / OV_MAXMM;               // px/mm (전체 그림 내부 좌표)
+
+  // ---- 화면 배치 2가지 ----
+  // 넓은 화면: 전체 | 확대 창 | 돋보기를 한 줄로 (viewBox 800×600)
+  // 좁은 화면(컨테이너 폭 < 640px, 휴대폰 세로): 위쪽에 전체(축소, 보조) + 확대 창, 아래쪽에 돋보기를 가로 전체 폭으로 (viewBox 400×620)
+  const NARROW_BELOW = 640;
+  const LAYOUTS = {
+    wide: { narrow: false, vbW: 800, vbH: 600,
+      ov: { tx: 0, ty: 0, s: 1, F: 1 },
+      mag: { x: 246, w: 346, top: 26, bot: 586, ix: 420, vW: 92, mL: [14, 24, 36], vL: [18, 32], font: 14, bevel: 10, capY: 16,
+             cap: '확대 창 (본척 숫자 단위 cm, 1칸 = 1mm)' },
+      lp: { x: 602, w: 190, top: 26, bot: 586, ix: 690, mL: [26, 40, 56], vL: [30, 48], font: 15, capY: 16 },
+      help: '왼쪽 전체 그림이나 가운데 확대 창을 위아래로 끌어 슬라이더를 움직이세요(확대 창은 미세 조정). ' +
+            '오른쪽 돋보기 창을 위아래로 끌면 확대 창의 점선 상자(돋보기 구간)가 부척을 따라 움직입니다. 키보드: ↑↓, PageUp/PageDown.' },
+    narrow: { narrow: true, vbW: 400, vbH: 620,
+      ov: { tx: 0, ty: 6, s: 0.56, F: 1.75 },
+      mag: { x: 140, w: 256, top: 26, bot: 334, ix: 236, vW: 78, mL: [10, 17, 26], vL: [14, 24], font: 13, bevel: 6, capY: 16,
+             cap: '확대 창 (숫자 cm)' },
+      lp: { x: 4, w: 392, top: 366, bot: 614, ix: 200, mL: [26, 40, 56], vL: [30, 48], font: 15, capY: 356 },
+      help: '왼쪽 전체 그림이나 오른쪽 확대 창을 위아래로 끌어 슬라이더를 움직이세요. ' +
+            '아래 돋보기 창을 끌면 확대 창의 점선 상자(돋보기 구간)가 움직입니다.' }
+  };
+  let L = LAYOUTS.wide;
+  let forcedNarrow = null;   // 검증용: null이면 컨테이너 폭으로 자동 결정
+
+  // 돋보기: 기본 120px/mm(0.02mm = 2.4px), ×2 선택 시 240px/mm. 선 굵기 0.8px
+  const KL_BASE = 120;
+  let kL = KL_BASE;
+  const LOUPE_DEFAULT = 200;
+
+  function kM() { return (L.mag.bot - L.mag.top) / (LEN + 10); }
+
+  let root, svg, ans, help;
+  function mount(el) {
+    root = el;
+    el.innerHTML =
+      '<h2 class="gw-title" style="margin:0 0 4px">' + TITLE + '</h2>' +
+      '<div class="gw-bar" style="margin:4px 0"><span class="gw-tag">부척 1/50 (0.02mm)</span>' +
+      '<span style="margin-left:4px">돋보기:</span>' +
+      '<button class="seg" id="' + ID + '-z1" aria-pressed="true">×1</button>' +
+      '<button class="seg" id="' + ID + '-z2" aria-pressed="false">×2</button></div>' +
+      '<div class="gw-help" id="' + ID + '-help"></div>' +
+      '<svg class="gw-svg" id="' + ID + '-svg" viewBox="0 0 800 600" tabindex="0" role="img" aria-label="하이트게이지 눈금"></svg>' +
+      '<div class="gw-bar"><button class="primary" id="' + ID + '-reveal">정답확인</button>' +
+      '<button id="' + ID + '-new">새 문제</button></div>' +
+      '<div class="gw-answer" id="' + ID + '-ans" aria-live="polite"></div>';
+    svg = el.querySelector('#' + ID + '-svg');
+    ans = el.querySelector('#' + ID + '-ans');
+    help = el.querySelector('#' + ID + '-help');
+    el.querySelector('#' + ID + '-reveal').onclick = reveal;
+    el.querySelector('#' + ID + '-new').onclick = newProblem;
+    const z1 = el.querySelector('#' + ID + '-z1'), z2 = el.querySelector('#' + ID + '-z2');
+    function setZoom(z) {
+      kL = KL_BASE * z;
+      z1.setAttribute('aria-pressed', z === 1);
+      z2.setAttribute('aria-pressed', z === 2);
+      draw();
+    }
+    z1.onclick = function () { setZoom(1); };
+    z2.onclick = function () { setZoom(2); };
+    bindDrag(svg);
+    applyLayout(true);
+    // 컨테이너 폭이 바뀌면(회전, 노션 임베드 크기 변경, 탭 전환) 배치를 다시 고른다
+    if (window.ResizeObserver) new ResizeObserver(function () { applyLayout(); }).observe(el);
+    else window.addEventListener('resize', function () { applyLayout(); });
+    newProblem();
+  }
+
+  function applyLayout(force) {
+    if (!root) return;
+    const w = root.clientWidth;
+    let narrow = forcedNarrow !== null ? forcedNarrow : (w > 0 ? w < NARROW_BELOW : L.narrow);
+    const next = narrow ? LAYOUTS.narrow : LAYOUTS.wide;
+    if (next === L && !force) return;
+    L = next;
+    root.classList.toggle('gw-narrow', L.narrow);
+    svg.setAttribute('viewBox', '0 0 ' + L.vbW + ' ' + L.vbH);
+    help.textContent = L.help;
+    draw();
+  }
+
+  function svgPoint(e) {
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX; pt.y = e.clientY;
+    return pt.matrixTransform(svg.getScreenCTM().inverse());
+  }
+
+  // 누른 위치가 어느 창인지
+  function regionAt(p) {
+    if (L.narrow) {
+      if (p.y >= L.lp.top - 28) return 'loupe';
+      return p.x < L.mag.x - 3 ? 'ov' : 'mag';
+    }
+    return p.x < (OV_X1 + L.mag.x) / 2 ? 'ov' : p.x < L.lp.x - 4 ? 'mag' : 'loupe';
+  }
+
+  function bindDrag(target) {
+    let drag = null;
+    target.addEventListener('pointerdown', function (e) {
+      const p = svgPoint(e);
+      const region = regionAt(p);
+      drag = { id: e.pointerId, region: region, y0: p.y, v0: region === 'loupe' ? loupeOffU : state };
+      try { target.setPointerCapture(e.pointerId); } catch (err) { /* 캡처 실패해도 드래그는 계속 */ }
+      e.preventDefault();
+    });
+    target.addEventListener('pointermove', function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      const dy = svgPoint(e).y - drag.y0;            // SVG y는 아래로 증가
+      if (drag.region === 'loupe') {
+        // 확대 창의 점선 상자(돋보기 구간)를 끄는 것과 같은 비율: 위로 끌면 구간이 위로 이동
+        loupeOffU = clampLoupe(drag.v0 - dy / kM() * 100);
+        draw();
+      } else {
+        const k = drag.region === 'ov' ? kO * L.ov.s : kM();
+        setState(drag.v0 - dy / k * 100);             // 위로 끌면 y 증가
+      }
+    });
+    function end(e) { if (drag && e.pointerId === drag.id) drag = null; }
+    target.addEventListener('pointerup', end);
+    target.addEventListener('pointercancel', end);
+    target.addEventListener('keydown', function (e) {
+      let d = 0;
+      if (e.key === 'ArrowUp') d = resU; else if (e.key === 'ArrowDown') d = -resU;
+      else if (e.key === 'PageUp') d = 100; else if (e.key === 'PageDown') d = -100;
+      if (d) { setState(state + d); e.preventDefault(); }
+    });
+  }
+
+  function clampLoupe(u) { return Math.max(-200, Math.min(LEN * 100 + 200, u)); }
+
+  function setState(s) {
+    const ns = Math.max(STATE_MIN, Math.min(STATE_MAX, Math.round(s / resU) * resU));
+    const changed = ns !== state;
+    state = ns;
+    if (changed) closeAnswer();
+    draw();
+  }
+  function closeAnswer() { revealed = false; if (ans) ans.classList.remove('open'); }
+
+  // ---- 그리기 (state에서만) ----
+  function ln(x1, y1, x2, y2, cls) {
+    return '<line x1="' + x1.toFixed(2) + '" y1="' + y1.toFixed(2) + '" x2="' + x2.toFixed(2) + '" y2="' + y2.toFixed(2) + '" class="' + cls + '"/>';
+  }
+  function rc(x, y, w, h, cls, extra) {
+    return '<rect x="' + x.toFixed(2) + '" y="' + y.toFixed(2) + '" width="' + Math.max(0, w).toFixed(2) + '" height="' + Math.max(0, h).toFixed(2) + '" class="' + cls + '"' + (extra || '') + '/>';
+  }
+  function tx(x, y, s, anchor, size, cls) {
+    return '<text x="' + x.toFixed(2) + '" y="' + y.toFixed(2) + '" text-anchor="' + anchor + '" font-size="' + size + '" class="' + (cls || 'h-txt') + '">' + s + '</text>';
+  }
+
+  function gf(name) { return ' fill="url(#' + ID + '-' + name + ')"'; }   // 그라데이션 채우기 속성
+  function pth(d, cls, extra) { return '<path d="' + d + '" class="' + cls + '"' + (extra || '') + '/>'; }
+  function f2(v) { return v.toFixed(2); }
+
+  // 그라데이션 정의(색은 CSS 변수 → 다크모드 자동 전환)
+  function gradDefs() {
+    function lg(name, dir, stops) {
+      const xy = dir === 'h' ? 'x1="0" y1="0" x2="1" y2="0"' : dir === 'd' ? 'x1="0" y1="0" x2="1" y2="1"' : 'x1="0" y1="0" x2="0" y2="1"';
+      return '<linearGradient id="' + ID + '-' + name + '" ' + xy + '>' +
+        stops.map(function (st) { return '<stop offset="' + st[0] + '" style="stop-color:var(' + st[1] + ')"/>'; }).join('') +
+        '</linearGradient>';
+    }
+    return lg('gScale', 'h', [[0, '--sc0'], [0.45, '--sc1'], [1, '--sc0']]) +            // 본척 눈금면(무광 크롬)
+      lg('gBevel', 'h', [[0, '--m0'], [0.6, '--m2'], [1, '--m1']]) +                       // 기둥 옆 모서리
+      lg('gMetal', 'h', [[0, '--m3'], [0.18, '--m1'], [0.5, '--m2'], [0.85, '--m3'], [1, '--m0']]) + // 크롬강 몸체
+      lg('gMetalV', 'v', [[0, '--m1'], [0.45, '--m2'], [1, '--m0']]) +                     // 수평 부품(조, 블록)
+      lg('gVern', 'd', [[0, '--vn0'], [1, '--vn1']]) +                                    // 부척판
+      lg('gBase', 'v', [[0, '--b1'], [0.12, '--b0'], [1, '--b2']]) +                       // 주철 베이스
+      lg('gPlate', 'v', [[0, '--p0'], [1, '--p1']]) +                                     // 정반
+      lg('gKnurl', 'v', [[0, '--m3'], [0.4, '--m1'], [1, '--m0']]);                        // 손잡이·휠
+  }
+
+  // 나사 머리(일자 홈)
+  function screw(cx, cy, r) {
+    return '<circle cx="' + f2(cx) + '" cy="' + f2(cy) + '" r="' + r + '" class="h-mtl"' + gf('gMetalV') + '/>' +
+      ln(cx - r * 0.7, cy + r * 0.25, cx + r * 0.7, cy - r * 0.25, 'h-slot');
+  }
+  // 오른쪽으로 튀어나온 클램프 나사(로렛 손잡이). xl = 몸체 오른쪽 면, cy = 중심 높이
+  function clampKnob(xl, cy) {
+    let s = rc(xl, cy - 2, 3, 4, 'h-mtl', gf('gMetalV'));
+    s += rc(xl + 3, cy - 5.5, 8, 11, 'h-mtl', gf('gKnurl') + ' rx="1.5"');
+    for (let k = -3; k <= 3; k += 2) s += ln(xl + 4, cy + k, xl + 10, cy + k, 'h-knurl');
+    return s;
+  }
+
+  // 본척+부척 눈금 (확대 창/돋보기 창 공용). toY: 1/100mm → SVG y
+  function scales(o) {
+    const y = state, toY = o.toY, a = revealed ? answer(state) : null;
+    const th = o.thin ? ' h-thin' : '';
+    let s = '';
+    // 정반(0mm 아래)
+    const y0 = toY(0);
+    if (y0 < o.bot) {
+      s += rc(o.left, y0, o.right - o.left, o.bot - y0, 'h-mtl', gf('gPlate'));
+      s += ln(o.left, y0 + 0.5, o.right, y0 + 0.5, 'h-shine');
+    }
+    const yFloor = Math.min(y0, o.bot);   // 정반 윗면(그 아래로는 부품을 그리지 않음)
+    // 본척 기둥(눈금면 + 옆 모서리)
+    const colTop = Math.max(o.top, toY((300 + LEN + 5) * 100));
+    s += rc(o.left + 6, colTop, o.ix - o.left - 6, yFloor - colTop, 'h-mtl', gf('gScale'));
+    if (o.bevel) {
+      s += rc(o.left + 6, colTop, o.bevel, yFloor - colTop, 'h-mtl', gf('gBevel'));
+      s += ln(o.left + 6 + o.bevel + 0.5, colTop, o.left + 6 + o.bevel + 0.5, yFloor, 'h-shine');
+    }
+    // 본척 눈금
+    const mLo = Math.max(0, Math.ceil(o.loU / 100)), mHi = Math.min(300 + LEN, Math.floor(o.hiU / 100));
+    for (let m = mLo; m <= mHi; m++) {
+      const sy = toY(m * 100);
+      const len = m % 10 === 0 ? o.mL[2] : m % 5 === 0 ? o.mL[1] : o.mL[0];
+      const hl = a && m === a.M + a.n;
+      s += ln(o.ix - len, sy, o.ix, sy, (hl ? 'h-hl' : 'h-tick') + th);
+      if (m % 10 === 0) s += tx(o.ix - o.mL[2] - 4, sy + o.font * 0.35, String(m / 10), 'end', o.font);   // 본척 숫자: cm
+      else if (o.allLabels) s += tx(o.ix - o.mL[2] - 4, sy + o.font * 0.3, (m / 10).toFixed(1), 'end', o.font - 3, 'h-cap');   // 돋보기 보조 숫자(cm)
+    }
+    // 슬라이더 몸체(부척판을 둘러싼 크롬 틀 + 고정 나사) — 확대 창에서만
+    if (o.body) {
+      const bt = toY(y + LEN * 100 + 380), bb = Math.min(toY(y - 380), yFloor);
+      if (bb > bt) {
+        s += rc(o.ix, bt, o.right - o.ix, bb - bt, 'h-mtl', gf('gMetal'));
+        s += ln(o.ix, bt + 0.5, o.right, bt + 0.5, 'h-shine');
+        const rx = o.ix + o.vW + (o.right - o.ix - o.vW) / 2;
+        const sTop = toY(y + LEN * 100 + 150) + 34, sBot = toY(y - 150) - 34;
+        if (sTop > bt + 6 && sTop < bb - 6) s += screw(rx, sTop, 6);
+        if (sBot > bt + 6 && sBot < bb - 6) s += screw(rx, sBot, 6);
+        // 부척판 옆 그림자 홈
+        s += ln(o.ix + o.vW + 1.5, Math.max(bt, toY(y + LEN * 100 + 150)), o.ix + o.vW + 1.5, Math.min(bb, toY(y - 150)), 'h-shade');
+      }
+    }
+    // 부척판
+    const vt = toY(y + LEN * 100 + 150), vb = Math.min(toY(y - 150), yFloor);
+    if (vb > vt) s += rc(o.ix, vt, o.vW, vb - vt, 'h-vplate', gf('gVern'));
+    // 부척 눈금
+    for (let i = 0; i <= N; i++) {
+      const u = y + i * pitchU;
+      if (u < o.loU - 50 || u > o.hiU + 50) continue;
+      const sy = toY(u);
+      const big = i % labelEvery === 0;
+      const hl = a && i === a.n;
+      s += ln(o.ix, sy, o.ix + (big ? o.vL[1] : o.vL[0]), sy, (hl ? 'h-hl' : 'h-vtick') + th);
+      if (big) s += tx(o.ix + o.vL[1] + 4, sy + o.font * 0.35, String(i / labelEvery), 'start', o.font);
+      else if (o.allLabels) s += tx(o.ix + o.vL[1] + 4, sy + o.font * 0.3, '(' + i + ')', 'start', o.font - 4, 'h-cap');
+    }
+    // 경계선
+    s += ln(o.ix, o.top, o.ix, o.bot, 'h-iface');
+    return s;
+  }
+
+  // 전체 그림: 실물형 버니어 하이트게이지(정반·베이스·기둥·슬라이더·스크라이버·미세이송)
+  // F: 글자 배율(좁은 화면에서는 전체 그림을 축소해 그리므로 글자를 키운다), full: 보조 이름표까지 모두 표시
+  function overview(y, F, full) {
+    const ovY = function (u) { return OV_YB - u / 100 * kO; };
+    let s = full ? tx(OV_X0, 16, '전체 (본척 숫자 0~30cm)', 'start', 13, 'h-cap') : '';
+    // 정반
+    s += rc(OV_X0, OV_YB, OV_X1 - OV_X0, 18, 'h-mtl', gf('gPlate'));
+    s += ln(OV_X0, OV_YB + 0.5, OV_X1, OV_YB + 0.5, 'h-shine');
+    s += tx(OV_X1 - 5, OV_YB + 9 + 4 * F, '정반', 'end', 10 * F, 'h-lbl-inv');
+    // 기둥(본척) + 꼭대기 캡
+    const cTop = ovY(OV_MAXMM * 100);
+    s += rc(CX0, cTop, CX1 - CX0, OV_YB - BH + 2 - cTop, 'h-mtl', gf('gScale'));   // 아랫부분은 베이스에 박혀 있음
+    s += rc(CX0, cTop, 3, OV_YB - BH + 2 - cTop, '', gf('gBevel'));
+    s += rc(CX0 - 2, cTop - 5, CX1 - CX0 + 4, 6, 'h-mtl', gf('gMetalV') + ' rx="1.5"');
+    for (let m = 10; m <= 360; m += 10) {
+      const sy = ovY(m * 100), big = m % 50 === 0;
+      s += ln(CX1 - (big ? 9 : 5), sy, CX1, sy, 'h-tick h-thin');
+      if (big && m <= 300) s += tx(CX0 - 8, sy + 4 * F, String(m / 10), 'end', 11 * F);   // cm
+    }
+    s += tx(BX0 - 4, OV_YB - 2, '0', 'end', 11 * F);
+    s += tx(OV_X0 + 2, ovY(360 * 100) + 4 * F, '본척', 'start', 11 * F, 'h-lbl');
+    if (full) {
+      s += tx(OV_X0 + 2, ovY(360 * 100) + 17, '(기둥)', 'start', 10, 'h-lbl');
+      s += tx(OV_X0 + 2, ovY(360 * 100) + 30, '단위 cm', 'start', 10, 'h-lbl');
+    }
+    // 베이스(무거운 주철 받침): 모따기 윤곽 + 윗면 광택 + 기둥 고정 보스
+    const BT = OV_YB - BH;
+    s += rc(CX0 - 5, BT - 5, CX1 - CX0 + 10, 6, 'h-mtl', gf('gMetalV'));
+    s += pth('M' + BX0 + ' ' + OV_YB + ' V' + (BT + 6) + ' L' + (BX0 + 6) + ' ' + BT + ' H' + (BX1 - 6) +
+             ' L' + BX1 + ' ' + (BT + 6) + ' V' + OV_YB + ' Z', 'h-mtl', gf('gBase'));
+    s += ln(BX0 + 6, BT + 0.8, BX1 - 6, BT + 0.8, 'h-shine');
+    s += rc(BX0 + 10, BT + 10, BX1 - BX0 - 20, 13, 'h-shade', ' rx="2"');
+    if (full) s += tx(OV_X0 + 2, BT - 5, '베이스', 'start', 10, 'h-lbl');
+
+    // ---- 움직이는 부분: 미세이송 블록 + 휠, 슬라이더(부척 창), 클램프, 스크라이버 조 ----
+    const sb = ovY(y);
+    const bTop = ovY(y + (LEN + 4) * 100), bBot = Math.min(sb + 3, OV_YB);
+    const ffBot = ovY(y + (LEN + 10) * 100), ffTop = ovY(y + (LEN + 18) * 100);
+    // 미세이송 블록(기둥을 감싸는 클램프 블록)
+    s += rc(SL, ffTop, CX1 + 22 - SL, ffBot - ffTop, 'h-mtl', gf('gMetal') + ' rx="2"');
+    s += ln(SL + 2, ffTop + 0.6, CX1 + 20, ffTop + 0.6, 'h-shine');
+    s += clampKnob(CX1 + 22, (ffTop + ffBot) / 2);
+    // 미세이송 나사봉 + 휠(로렛 너트)
+    const rodX = CX1 + 16;
+    s += ln(rodX, ffBot, rodX, bTop, 'h-rod');
+    const wy = (ffBot + bTop) / 2;
+    s += rc(rodX - 11, wy - 4, 22, 8, 'h-mtl', gf('gKnurl') + ' rx="2"');
+    for (let k = -8; k <= 8; k += 2.6) s += ln(rodX + k, wy - 3.4, rodX + k, wy + 3.4, 'h-knurl');
+    if (full) s += tx(rodX + 14, wy + 3.5, '미세이송 휠', 'start', 10, 'h-lbl');
+    // 슬라이더 몸체 + 부척 창(창 안에는 뒤쪽 기둥의 본척 눈금면이 보임)
+    const wTop = ovY(y + (LEN + 2) * 100), wBot = Math.min(sb + 1.5, bBot - 1);
+    s += rc(SL, bTop, SR - SL, bBot - bTop, 'h-mtl', gf('gMetal') + ' rx="2"');
+    s += rc(CX0 + 2, wTop, CX1 - CX0 - 2, wBot - wTop, 'h-mtl', gf('gScale'));
+    for (let m = Math.ceil((y + 1) / 1000) * 10 - 10; m * 100 <= y + (LEN + 2) * 100; m += 10) {
+      const wy2 = ovY(m * 100);
+      if (wy2 > wTop + 0.5 && wy2 < wBot - 0.5) s += ln(CX1 - (m % 50 === 0 ? 9 : 5), wy2, CX1, wy2, 'h-tick h-thin');
+    }
+    s += ln(SL + 1, bTop + 0.6, SR - 1, bTop + 0.6, 'h-shine');
+    // 부척판 + 눈금(labelEvery 칸마다)
+    s += rc(CX1, wTop, 14, wBot - wTop, 'h-vplate', gf('gVern') + ' style="stroke-width:0.6"');
+    for (let i = 0; i <= N; i += labelEvery) {
+      const vy = ovY(y + i * pitchU);
+      s += ln(CX1, vy, CX1 + (i === 0 || i === N ? 8 : 5), vy, 'h-vtick h-thin');
+    }
+    s += screw(SR - 7, bTop + 6, 2.4);
+    s += screw(SR - 7, wBot - 4, 2.4);
+    // 슬라이더 클램프 나사
+    s += clampKnob(SR, bTop + 10);
+    if (full) s += tx(SR + 15, bTop + 13, '클램프', 'start', 10, 'h-lbl');
+    // 스크라이버 조(홀더) + 스크라이버: 아래 날(파란 선) = 부척 0점 높이
+    s += rc(SR - 6, sb - 15, 48, 10, 'h-mtl', gf('gMetalV') + ' rx="1.5"');
+    s += screw(SR + 32, sb - 10, 2.8);
+    s += pth('M' + (SR - 6) + ' ' + f2(sb - 5) + ' H' + (OV_X1 - 30) + ' L' + (OV_X1 - 8) + ' ' + f2(sb) +
+             ' H' + (SR - 6) + ' Z', 'h-mtl', gf('gMetalV'));
+    s += ln(SR - 6, sb, OV_X1 - 8, sb, 'h-scr-edge');
+    s += tx(OV_X1 - 8, full ? sb - 8 : sb - 18, '스크라이버', 'end', 10 * F, 'h-lbl');
+    // 확대 창이 보여주는 구간
+    const loU = y - 500, hiU = y + (LEN + 5) * 100;
+    s += rc(CX0 - 12, ovY(hiU), SR - CX0 + 16, ovY(loU) - ovY(hiU), 'h-ind');
+    return s;
+  }
+
+  function draw() {
+    if (!svg) return;
+    const y = state, km = kM(), M_ = L.mag, P = L.lp;
+    let s = '<defs>' + gradDefs() +
+      '<clipPath id="' + ID + '-clipM"><rect x="' + M_.x + '" y="' + M_.top + '" width="' + M_.w + '" height="' + (M_.bot - M_.top) + '"/></clipPath>' +
+      '<clipPath id="' + ID + '-clipL"><rect x="' + P.x + '" y="' + P.top + '" width="' + P.w + '" height="' + (P.bot - P.top) + '"/></clipPath>' +
+      '</defs>';
+
+    // ---------- 전체 그림 (좁은 화면에서는 축소한 보조 그림) ----------
+    if (L.narrow) {
+      s += tx(4, 16, '전체', 'start', 13, 'h-cap');
+      s += '<g transform="translate(' + L.ov.tx + ' ' + L.ov.ty + ') scale(' + L.ov.s + ')">' + overview(y, L.ov.F, false) + '</g>';
+    } else {
+      s += overview(y, 1, true);
+    }
+
+    // ---------- 확대 창 ----------
+    const mLoU = y - 500, mHiU = y + (LEN + 5) * 100;
+    const toYM = function (u) { return M_.bot - (u - mLoU) / 100 * km; };
+    s += tx(M_.x, M_.capY, M_.cap, 'start', 13, 'h-cap');
+    s += rc(M_.x, M_.top, M_.w, M_.bot - M_.top, 'h-panel');
+    s += '<g clip-path="url(#' + ID + '-clipM)">';
+    s += scales({ toY: toYM, loU: mLoU, hiU: mHiU, top: M_.top, bot: M_.bot, left: M_.x, right: M_.x + M_.w, ix: M_.ix,
+                  mL: M_.mL, vL: M_.vL, vW: M_.vW, font: M_.font, bevel: M_.bevel, body: true });
+    // 돋보기 구간 표시
+    const half = (P.bot - P.top) / 2 / kL * 100, lc = y + loupeOffU;
+    const it = toYM(lc + half), ib = toYM(lc - half);
+    s += rc(M_.x + 4, it, M_.w - 8, ib - it, 'h-ind');
+    s += '</g>';
+    s += rc(M_.x, M_.top, M_.w, M_.bot - M_.top, 'h-panel', ' style="fill:none"');
+
+    // ---------- 돋보기 창 ----------
+    const midY = (P.top + P.bot) / 2;
+    const toYL = function (u) { return midY - (u - lc) / 100 * kL; };
+    s += tx(P.x, P.capY, '돋보기 ×' + (kL / KL_BASE) + ' · cm (끌어서 이동)', 'start', 13, 'h-cap');
+    s += rc(P.x, P.top, P.w, P.bot - P.top, 'h-panel');
+    s += '<g clip-path="url(#' + ID + '-clipL)">';
+    s += scales({ toY: toYL, loU: lc - half - 100, hiU: lc + half + 100, top: P.top, bot: P.bot, left: P.x, right: P.x + P.w, ix: P.ix,
+                  mL: P.mL, vL: P.vL, vW: P.x + P.w - P.ix, font: P.font, thin: true, allLabels: true });
+    s += '</g>';
+    s += rc(P.x, P.top, P.w, P.bot - P.top, 'h-panel', ' style="fill:none"');
+
+    svg.innerHTML = s;
+  }
+
+  function reveal() {
+    if (revealed) { closeAnswer(); draw(); return; }
+    const a = answer(state);
+    ans.innerHTML = '<div class="gw-value">' + a.value + ' mm</div>' +
+      '<div>' + a.text + '</div>' +
+      '<div class="gw-note">' + a.detail + ' (그림에 초록색으로 표시)</div>' +
+      '<div class="gw-note">※ 하이트게이지는 숫자가 위로 커지므로 부척 0점 바로 <b>아래</b> 본척 눈금을 읽습니다. 위쪽 눈금을 읽으면 1mm 크게 나옵니다.</div>' +
+      '<div class="gw-note">※ 본척 숫자는 cm 단위(1 = 10mm)이고, 작은 눈금 1칸은 1mm입니다. 정답은 mm로 씁니다.</div>';
+    revealed = true;
+    ans.classList.add('open');
+    // 패널이 화면 밖에 열리면 보이도록 스크롤
+    try {
+      const r = ans.getBoundingClientRect();
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      if (r.top < 0 || r.bottom > vh) ans.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } catch (e) { /* 스크롤 실패는 무시 */ }
+    draw();
+  }
+
+  function newProblem() {
+    loupeOffU = LOUPE_DEFAULT;
+    closeAnswer();
+    state = randomState();
+    draw();
+  }
+
+  window.GaugeWidget = { id: ID, title: TITLE, mount: mount, newProblem: newProblem, reveal: reveal,
+                         _answer: answer, _randomState: randomState,
+                         _setState: setState, _getState: function () { return state; },
+                         _layout: function () { return L; },
+                         _forceLayout: function (n) { forcedNarrow = n; applyLayout(true); } };
+  document.addEventListener('DOMContentLoaded', function () {
+    const el = document.getElementById('gw-root');
+    if (el) mount(el);
+  });
+})();
+</script>
+</body>
+</html>

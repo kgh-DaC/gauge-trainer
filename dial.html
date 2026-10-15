@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>다이얼게이지 눈금읽기</title>
+<style>
+  :root { --bg:#fff; --fg:#1f2328; --muted:#656d76; --line:#d0d7de; --accent:#0969da; --ok:#1a7f37;
+          --face:#fbfbf7; --tick:#1f2328; --needle:#c8202c; --small:#1f2328; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --line:#30363d; --accent:#4493f8; --ok:#3fb950;
+          --face:#f3f3ee; --tick:#1f2328; --needle:#c8202c; --small:#1f2328; } }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, "Malgun Gothic", sans-serif; }
+  .dial-wrap { max-width:520px; margin:0 auto; }
+  .dial-wrap h2 { margin:0 0 4px; font-size:1.25em; }
+  .dial-help { color:var(--muted); font-size:.9em; margin:0 0 8px; }
+  .dial-note { color:var(--muted); font-size:.85em; margin:0 0 6px; padding:4px 10px; border-left:3px solid var(--accent); }
+  .dial-note summary { cursor:pointer; color:var(--fg); font-weight:600; }
+  .dial-note p { margin:4px 0 2px; }
+  /* 그림 크기는 폭(viewBox 비율)으로 정한다. 높이 상한은 '보조'로만 쓴다:
+     - svh(주소창 제외 높이) 우선, 미지원 브라우저는 vh 대체
+     - max(300px, …)로 하한을 둬서 낮은 iframe/가로 화면에서 그림이 과하게 줄지 않게 함
+     폭은 100%지만 viewBox(meet)로 그림은 가운데 정렬·비율 유지 */
+  .gw-svg { width:100%; height:auto; aspect-ratio:400/560; touch-action:none; user-select:none; -webkit-user-select:none; display:block; margin:0 auto;
+            max-height:max(300px, calc(100vh - 190px)); }
+  @supports (height:100svh) { .gw-svg { max-height:max(300px, calc(100svh - 190px)); } }
+  @media (min-width:481px) {   /* 넓은 화면: 제목·안내문이 길어지는 만큼 여유를 더 둠 */
+    .gw-svg { max-height:max(280px, calc(100vh - 250px)); }
+    @supports (height:100svh) { .gw-svg { max-height:max(280px, calc(100svh - 250px)); } }
+  }
+  @media (max-width:480px) {
+    body { padding:10px 10px 16px; }
+    .dial-wrap h2 { font-size:1.1em; }
+    .dial-help { font-size:.82em; margin-bottom:4px; line-height:1.4; }
+    .gw-bar { margin:8px 0; gap:6px; }
+    button { padding:8px 12px; }
+    .gw-opt button { padding:6px 9px; }
+  }
+  .gw-svg .dial-grab { cursor:grab; }
+  .gw-svg.dragging .dial-grab { cursor:grabbing; }
+  .gw-svg:focus { outline:2px solid var(--accent); outline-offset:2px; border-radius:8px; }
+  .gw-bar { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; align-items:center; }
+  .gw-opt { display:flex; gap:6px; align-items:center; font-size:.9em; color:var(--muted); flex-wrap:wrap; }
+  .gw-opt button { padding:6px 10px; }
+  button { font:inherit; padding:8px 14px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--fg); cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button[aria-pressed="true"] { border-color:var(--accent); color:var(--accent); font-weight:600; }
+  .gw-answer { display:none; padding:12px; border:1px solid var(--ok); border-radius:8px; }
+  .gw-answer.open { display:block; }
+  .gw-value { font-size:1.6em; font-weight:700; color:var(--ok); }
+  .dial-warn { margin-top:6px; font-size:.92em; color:var(--muted); }
+</style>
+</head>
+<body>
+<div id="gw-root"></div>
+<script>
+(function () {
+  const ID = 'dial';
+  const TITLE = '다이얼게이지';
+  const NS = 'http://www.w3.org/2000/svg';
+  const P = ID + '-';                       // SVG defs/DOM id 접두어(병합 시 충돌 방지)
+
+  // ---- 상태: 정수 s (단위 1/100 mm), 0 ~ 999 ----
+  // 10.00mm는 작은 바늘이 0 위치로 돌아가 0.00과 그림이 같아지므로 범위에서 제외(QA F1)
+  const STATE_MIN = 0, STATE_MAX = 999;
+  const BOUNDARY_POOL = [0, 99, 100, 101, 199, 200];
+  let state = 0;
+  let smallContinuous = true;    // smallNeedleMotion: 기본 'continuous'(실제 계기와 같음), 'step'은 선택 옵션
+  let zoomed = false;
+
+  // ---- 기하 ----
+  const CX = 200, CY = 250;
+  const R_OUT = 186;            // 베젤 바깥(널링)
+  const R_KNURL_IN = 175;       // 널링 띠 안쪽
+  const R_BEZEL_IN = 169;       // 베젤 안쪽 경사면
+  const R_FACE = 164;           // 눈금판
+  const R_TICK = 158;           // 눈금선 바깥 끝
+  const SCX = 200, SCY = CY + 80, SR = 38;       // 작은 다이얼(회전계): 하단, 큰 바늘보다 위 레이어(QA W1)
+  const VB_W = 400, VB_H = 560, Z_W = 160, Z_H = 224;   // 확대 시야도 같은 5:7 비율(높이 고정)
+  const SPINDLE_PER_S = 0.025;  // 스핀들 들어감(그림 단위/0.01mm), 장식
+
+  // ---- 명세 함수: 상태 → 정답 (정수 연산, 표시 단계에서만 문자열) ----
+  function answer(s) {
+    const A = Math.floor(s / 100);
+    const n = s % 100;
+    const str = A + '.' + String(n).padStart(2, '0');
+    let note = '';
+    if (smallContinuous && n >= 90) {
+      const nextLbl = (A + 1) === 10 ? '0(10)' : String(A + 1);
+      const wrong = (A + 1) + '.' + String(n).padStart(2, '0');
+      note = '주의: 작은 바늘이 ' + nextLbl + '에 거의 닿아 있지만 큰 바늘이 아직 0을 지나지 않았으므로 ' +
+             A + 'mm로 읽습니다(' + wrong + 'mm로 읽으면 1mm 틀림).';
+    } else if (smallContinuous && n <= 10 && A >= 1) {
+      note = '참고: 큰 바늘이 0을 막 지나 작은 바늘이 숫자 ' + A + ' 위치를 조금 넘었습니다 → ' + A + 'mm로 읽습니다.';
+    }
+    return {
+      s: s, A: A, n: n, valueText: str, note: note,
+      text: '작은 바늘 ' + A + 'mm + 큰 바늘 ' + n + '눈금 × 0.01 = ' + str + 'mm'
+    };
+  }
+  function bigAngle(s) { return (s % 100) * 3.6; }
+  function smallAngle(s) { return smallContinuous ? (s / 100) * 36 : Math.floor(s / 100) * 36; }
+
+  let lastProblem = -1;
+  function randomState() {
+    let s;
+    do {
+      if (Math.random() < 0.2) s = BOUNDARY_POOL[Math.floor(Math.random() * BOUNDARY_POOL.length)];
+      else s = STATE_MIN + Math.floor(Math.random() * (STATE_MAX - STATE_MIN + 1));
+    } while (s === lastProblem);
+    lastProblem = s;
+    return s;
+  }
+
+  // ---- SVG 도우미 ----
+  function el(tag, attrs, parent) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function polar(cx, cy, r, deg) {          // deg: 12시 기준 시계방향
+    const rad = deg * Math.PI / 180;
+    return [cx + r * Math.sin(rad), cy - r * Math.cos(rad)];
+  }
+  function grad(defs, tag, id, attrs, stops) {
+    const g = el(tag, Object.assign({ id: P + id }, attrs), defs);
+    stops.forEach(function (st) {
+      el('stop', { offset: st[0], 'stop-color': st[1], 'stop-opacity': st[2] === undefined ? 1 : st[2] }, g);
+    });
+    return g;
+  }
+  function url(id) { return 'url(#' + P + id + ')'; }
+
+  let root, svg, ans, bigNeedle, smallNeedle, spindle, inset, zoomBtn, contBtn, stepBtn;
+
+  function buildDefs() {
+    const d = el('defs', {}, svg);
+    // 원통(스템·캡·스핀들): 좌우 방향 크롬 반사
+    grad(d, 'linearGradient', 'gCyl', { x1: 0, y1: 0, x2: 1, y2: 0 },
+      [[0, '#4d545c'], [.22, '#b9c0c7'], [.42, '#f6f8fa'], [.62, '#c3c9cf'], [.85, '#6d757e'], [1, '#3f454c']]);
+    // 베젤(널링 링): 대각 금속
+    grad(d, 'linearGradient', 'gBezel', { x1: 0, y1: 0, x2: 1, y2: 1 },
+      [[0, '#f4f6f8'], [.3, '#c2c8cf'], [.55, '#7b838c'], [.8, '#b5bcc4'], [1, '#e6e9ec']]);
+    // 베젤 안쪽 경사면: 반대 방향(오목하게 보이게)
+    grad(d, 'linearGradient', 'gBevel', { x1: 0, y1: 0, x2: 1, y2: 1 },
+      [[0, '#6a727b'], [.5, '#aeb5bd'], [1, '#f1f3f5']]);
+    // 눈금판
+    grad(d, 'radialGradient', 'gFace', { cx: .5, cy: .45, r: .6 },
+      [[0, '#ffffff'], [.75, '#f8f7f2'], [1, '#e7e5dc']]);
+    // 눈금판 가장자리 그림자(베젤 아래로 들어간 느낌)
+    grad(d, 'radialGradient', 'gEdge', { cx: .5, cy: .5, r: .5 },
+      [[0, '#000', 0], [.9, '#000', 0], [1, '#000', .22]]);
+    // 유리
+    grad(d, 'linearGradient', 'gGlass', { x1: 0, y1: 0, x2: 1, y2: 1 },
+      [[0, '#ffffff', .26], [.32, '#ffffff', .07], [.5, '#ffffff', 0], [.85, '#000000', 0], [1, '#000000', .07]]);
+    grad(d, 'radialGradient', 'gGlint', { cx: .5, cy: .5, r: .5 },
+      [[0, '#ffffff', .38], [1, '#ffffff', 0]]);
+    // 바늘 허브 캡
+    grad(d, 'radialGradient', 'gHub', { cx: .35, cy: .32, r: .7 },
+      [[0, '#ffffff'], [.45, '#b4bbc2'], [1, '#4b525a']]);
+    // 접촉자(초경 볼)
+    grad(d, 'radialGradient', 'gBall', { cx: .35, cy: .3, r: .75 },
+      [[0, '#f0f0f0'], [.35, '#8a9097'], [1, '#202428']]);
+    // 뒷판 러그
+    grad(d, 'linearGradient', 'gLug', { x1: 0, y1: 0, x2: 1, y2: 0 },
+      [[0, '#5b636b'], [.35, '#c7cdd3'], [.6, '#9aa2aa'], [1, '#4a5158']]);
+    const f = el('filter', { id: P + 'fShadow', x: '-50%', y: '-50%', width: '200%', height: '200%' }, d);
+    el('feDropShadow', { dx: 1.6, dy: 2.2, stdDeviation: 1.3, 'flood-color': '#000', 'flood-opacity': .35 }, f);
+    const f2 = el('filter', { id: P + 'fCase', x: '-20%', y: '-20%', width: '140%', height: '140%' }, d);
+    el('feDropShadow', { dx: 0, dy: 4, stdDeviation: 4, 'flood-color': '#000', 'flood-opacity': .35 }, f2);
+    const cp = el('clipPath', { id: P + 'cFace' }, d);
+    el('circle', { cx: CX, cy: CY, r: R_FACE }, cp);
+  }
+
+  function buildSvg() {
+    svg.innerHTML = '';
+    buildDefs();
+
+    // --- 뒷판 러그(케이스 뒤, 위로 튀어나온 귀 + 구멍) ---
+    const lugW = 66, lugTop = 4, lugBot = CY - R_OUT + 40, holeY = 30, holeR = 9;
+    const lx = CX - lugW / 2, rr = lugW / 2;
+    const lugPath =
+      'M' + lx + ' ' + lugBot + ' V' + (lugTop + rr) +
+      ' A' + rr + ' ' + rr + ' 0 0 1 ' + (lx + lugW) + ' ' + (lugTop + rr) +
+      ' V' + lugBot + ' Z' +
+      ' M' + (CX - holeR) + ' ' + holeY + ' A' + holeR + ' ' + holeR + ' 0 1 0 ' + (CX + holeR) + ' ' + holeY +
+      ' A' + holeR + ' ' + holeR + ' 0 1 0 ' + (CX - holeR) + ' ' + holeY + ' Z';
+    el('path', { d: lugPath, 'fill-rule': 'evenodd', fill: url('gLug'), stroke: '#3d434a', 'stroke-width': 1 }, svg);
+    el('circle', { cx: CX, cy: holeY, r: holeR + 2.5, fill: 'none', stroke: '#e3e7eb', 'stroke-opacity': .5, 'stroke-width': 1 }, svg);
+
+    // --- 베젤 클램프(베젤 고정 나사, 7~8시 방향) ---
+    const clamp = el('g', { transform: 'rotate(236 ' + CX + ' ' + CY + ')' }, svg);
+    el('rect', { x: CX - 6, y: CY - R_OUT - 12, width: 12, height: 18, fill: url('gCyl'), stroke: '#3d434a', 'stroke-width': .8 }, clamp);
+    el('rect', { x: CX - 11, y: CY - R_OUT - 26, width: 22, height: 15, rx: 3, fill: url('gCyl'), stroke: '#3d434a', 'stroke-width': .8 }, clamp);
+    for (let i = -8; i <= 8; i += 2.6) {
+      el('line', { x1: CX + i, y1: CY - R_OUT - 25, x2: CX + i, y2: CY - R_OUT - 12, stroke: '#3d434a', 'stroke-opacity': .45, 'stroke-width': .7 }, clamp);
+    }
+
+    // --- 스핀들 + 접촉자 (스템 뒤에 그려서 s가 커지면 스템 속으로 들어가 보임) ---
+    spindle = el('g', {}, svg);
+    el('rect', { x: CX - 6, y: CY + R_OUT + 20, width: 12, height: 72, fill: url('gCyl'), stroke: '#3d434a', 'stroke-width': .8 }, spindle);
+    const tipTop = CY + R_OUT + 92;             // 접촉자 몸통(육각 느낌의 사다리꼴) + 볼
+    el('path', { d: 'M' + (CX - 8) + ' ' + tipTop + ' H' + (CX + 8) + ' L' + (CX + 6) + ' ' + (tipTop + 12) + ' H' + (CX - 6) + ' Z',
+      fill: url('gCyl'), stroke: '#3d434a', 'stroke-width': .8 }, spindle);
+    el('circle', { cx: CX, cy: tipTop + 18, r: 7, fill: url('gBall'), stroke: '#202428', 'stroke-width': .6 }, spindle);
+
+    // --- 스템(케이스 목 + 슬리브) ---
+    const neckTop = CY + R_OUT - 12, neckBot = CY + R_OUT + 30;
+    el('rect', { x: CX - 19, y: neckTop, width: 38, height: neckBot - neckTop, fill: url('gCyl'), stroke: '#3d434a', 'stroke-width': 1 }, svg);
+    el('rect', { x: CX - 21, y: neckBot - 4, width: 42, height: 6, rx: 1.5, fill: url('gCyl'), stroke: '#3d434a', 'stroke-width': .8 }, svg);
+    el('rect', { x: CX - 13, y: neckBot + 2, width: 26, height: 40, fill: url('gCyl'), stroke: '#3d434a', 'stroke-width': 1 }, svg);
+    el('rect', { x: CX - 14, y: neckBot + 38, width: 28, height: 5, rx: 1.5, fill: url('gCyl'), stroke: '#3d434a', 'stroke-width': .8 }, svg);
+
+    // --- 상단 캡(스핀들 윗끝 덮개) ---
+    el('rect', { x: CX - 14, y: CY - R_OUT - 18, width: 28, height: 26, rx: 4, fill: url('gCyl'), stroke: '#3d434a', 'stroke-width': 1 }, svg);
+
+    // --- 케이스/베젤 ---
+    el('circle', { cx: CX, cy: CY, r: R_OUT, fill: url('gBezel'), stroke: '#3d434a', 'stroke-width': 1.2, filter: url('fCase') }, svg);
+    const kn = el('g', { stroke: '#2f353b', 'stroke-opacity': .38, 'stroke-width': 1.1 }, svg);
+    for (let i = 0; i < 144; i++) {           // 널링(미끄럼 방지 홈)
+      const p1 = polar(CX, CY, R_OUT - 1, i * 2.5), p2 = polar(CX, CY, R_KNURL_IN + 1, i * 2.5);
+      el('line', { x1: p1[0], y1: p1[1], x2: p2[0], y2: p2[1] }, kn);
+    }
+    el('circle', { cx: CX, cy: CY, r: R_KNURL_IN, fill: url('gBevel'), stroke: '#3d434a', 'stroke-width': .8 }, svg);
+    el('circle', { cx: CX, cy: CY, r: R_BEZEL_IN, fill: url('gBezel'), stroke: 'none' }, svg);
+
+    // --- 눈금판 ---
+    el('circle', { cx: CX, cy: CY, r: R_FACE, fill: url('gFace'), stroke: '#4a5158', 'stroke-width': 1 }, svg);
+
+    // 큰 다이얼 눈금 0~99
+    const ticks = el('g', { stroke: 'var(--tick)', 'stroke-linecap': 'butt' }, svg);
+    for (let i = 0; i < 100; i++) {
+      const deg = i * 3.6;
+      const len = i % 10 === 0 ? 18 : (i % 5 === 0 ? 13 : 8);
+      const w = i % 10 === 0 ? 2 : (i % 5 === 0 ? 1.4 : 0.9);
+      const p1 = polar(CX, CY, R_TICK, deg), p2 = polar(CX, CY, R_TICK - len, deg);
+      el('line', { x1: p1[0], y1: p1[1], x2: p2[0], y2: p2[1], 'stroke-width': w }, ticks);
+      if (i % 10 === 0) {
+        const t = polar(CX, CY, R_TICK - 31, deg);
+        const tx = el('text', { x: t[0], y: t[1], 'text-anchor': 'middle', 'dominant-baseline': 'central',
+          'font-size': 15, 'font-weight': 600, fill: 'var(--tick)', 'font-family': 'system-ui, sans-serif' }, svg);
+        tx.textContent = String(i);
+      }
+    }
+    el('circle', { cx: CX, cy: CY, r: R_TICK, fill: 'none', stroke: 'var(--tick)', 'stroke-width': .6 }, svg);
+    const unit = el('text', { x: CX, y: CY - 62, 'text-anchor': 'middle', 'font-size': 12, 'font-weight': 600, fill: '#3d434a',
+      'font-family': 'system-ui, sans-serif' }, svg);
+    unit.textContent = '0.01 mm';
+    const rev = el('text', { x: CX, y: CY - 47, 'text-anchor': 'middle', 'font-size': 9, fill: '#656d76',
+      'font-family': 'system-ui, sans-serif' }, svg);
+    rev.textContent = '1회전 = 1 mm';
+    el('circle', { cx: CX, cy: CY, r: R_FACE, fill: url('gEdge'), 'pointer-events': 'none' }, svg);
+
+    // --- 큰 바늘(가는 지침 + 꼬리 균형추) ---
+    bigNeedle = el('g', { id: P + 'big', filter: url('fShadow') }, svg);
+    el('polygon', { points: [
+        CX - 0.6, CY - R_TICK + 3, CX + 0.6, CY - R_TICK + 3,
+        CX + 2.6, CY - 8, CX + 2.2, CY + 22, CX - 2.2, CY + 22, CX - 2.6, CY - 8].join(' '),
+      fill: 'var(--needle)' }, bigNeedle);
+    el('circle', { cx: CX, cy: CY + 25, r: 6, fill: 'var(--needle)' }, bigNeedle);
+    el('circle', { cx: CX, cy: CY, r: 10, fill: url('gHub'), stroke: '#3d434a', 'stroke-width': .8, filter: url('fShadow') }, svg);
+    el('circle', { cx: CX, cy: CY, r: 2.6, fill: '#2f353b' }, svg);
+
+    // --- 작은 다이얼(회전계) 0~9 — 큰 바늘 위 레이어, 포인터는 통과 ---
+    const small = el('g', { id: P + 'small', 'pointer-events': 'none' }, svg);
+    el('circle', { cx: SCX, cy: SCY, r: SR + 3, fill: url('gBevel'), stroke: '#4a5158', 'stroke-width': .8 }, small);
+    el('circle', { cx: SCX, cy: SCY, r: SR, fill: '#ffffff', stroke: '#4a5158', 'stroke-width': .6 }, small);
+    const st = el('g', { stroke: 'var(--tick)' }, small);
+    for (let k = 0; k < 20; k++) {             // 1mm 눈금 + 0.5mm 보조 눈금
+      const deg = k * 18, major = k % 2 === 0;
+      const p1 = polar(SCX, SCY, SR - 1, deg), p2 = polar(SCX, SCY, SR - (major ? 8 : 4), deg);
+      el('line', { x1: p1[0], y1: p1[1], x2: p2[0], y2: p2[1], 'stroke-width': major ? 1.5 : 0.8 }, st);
+      if (major) {
+        const t = polar(SCX, SCY, SR - 16, deg);
+        const tx = el('text', { x: t[0], y: t[1], 'text-anchor': 'middle', 'dominant-baseline': 'central',
+          'font-size': 10, 'font-weight': 600, fill: 'var(--tick)', 'font-family': 'system-ui, sans-serif' }, small);
+        tx.textContent = String(k / 2);
+      }
+    }
+    const mmLbl = el('text', { x: SCX, y: SCY + 15, 'text-anchor': 'middle', 'font-size': 7, fill: '#57606a',
+      'font-family': 'system-ui, sans-serif' }, small);
+    mmLbl.textContent = 'mm';
+    smallNeedle = el('g', { id: P + 'smallneedle' }, small);
+    el('polygon', { points: [SCX - 2, SCY + 7, SCX + 2, SCY + 7, SCX + 0.55, SCY - SR + 4, SCX - 0.55, SCY - SR + 4].join(' '),
+      fill: 'var(--small)' }, smallNeedle);
+    el('circle', { cx: SCX, cy: SCY, r: 3.6, fill: url('gHub'), stroke: '#2f353b', 'stroke-width': .6 }, small);
+
+    // --- 유리(반사광) — 그림만, 포인터 통과 ---
+    const glass = el('g', { 'clip-path': url('cFace'), 'pointer-events': 'none' }, svg);
+    el('circle', { cx: CX, cy: CY, r: R_FACE, fill: url('gGlass') }, glass);
+    el('ellipse', { cx: CX - 62, cy: CY - 92, rx: 92, ry: 26, fill: url('gGlint'), transform: 'rotate(-32 ' + (CX - 62) + ' ' + (CY - 92) + ')' }, glass);
+    el('circle', { cx: CX, cy: CY, r: R_FACE - 1.5, fill: 'none', stroke: '#ffffff', 'stroke-opacity': .35, 'stroke-width': 1.2 }, glass);
+
+    // 드래그 영역 (베젤 전체)
+    el('circle', { class: 'dial-grab', cx: CX, cy: CY, r: R_OUT, fill: 'transparent' }, svg);
+
+    // 확대 시 작은 다이얼 축소 인셋 (같은 그림을 <use>로 재사용)
+    inset = el('g', { 'pointer-events': 'none', display: 'none' }, svg);
+    el('circle', { cx: SCX, cy: SCY, r: SR + 5, fill: '#ffffff', stroke: 'var(--accent)', 'stroke-width': 2 }, inset);
+    el('use', { href: '#' + P + 'small' }, inset);
+  }
+
+  function setViewBox() {
+    if (!zoomed) {
+      svg.setAttribute('viewBox', '0 0 ' + VB_W + ' ' + VB_H);
+      inset.setAttribute('display', 'none');
+      return;
+    }
+    // 큰 바늘 끝 주변 확대 (전체 화면과 같은 비율 → SVG 높이 불변)
+    const tip = polar(CX, CY, R_TICK - 12, bigAngle(state));
+    const x0 = tip[0] - Z_W / 2, y0 = tip[1] - Z_H / 2;
+    svg.setAttribute('viewBox', x0 + ' ' + y0 + ' ' + Z_W + ' ' + Z_H);
+    // 인셋: 시야 왼쪽 위 모서리에 작은 다이얼 축소본
+    const k = 0.6, r = (SR + 5) * k;
+    inset.setAttribute('transform', 'translate(' + (x0 + r + 4) + ' ' + (y0 + r + 4) + ') scale(' + k + ') translate(' + (-SCX) + ' ' + (-SCY) + ')');
+    inset.setAttribute('display', 'inline');
+  }
+
+  function draw() {
+    bigNeedle.setAttribute('transform', 'rotate(' + bigAngle(state) + ' ' + CX + ' ' + CY + ')');
+    smallNeedle.setAttribute('transform', 'rotate(' + smallAngle(state) + ' ' + SCX + ' ' + SCY + ')');
+    spindle.setAttribute('transform', 'translate(0 ' + (-state * SPINDLE_PER_S) + ')');
+    if (zoomed && !drag) setViewBox();   // 드래그 중에는 시야 고정(좌표 되먹임 방지), 놓으면 바늘 끝으로 이동
+  }
+
+  // ---- 드래그: 누적 각 방식 (99↔0 래핑 처리) ----
+  let drag = null;
+  function pointerAngle(evt) {
+    const pt = svg.createSVGPoint();
+    pt.x = evt.clientX; pt.y = evt.clientY;
+    const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+    let deg = Math.atan2(p.x - CX, -(p.y - CY)) * 180 / Math.PI;   // 12시 기준 시계방향
+    if (deg < 0) deg += 360;
+    return deg;
+  }
+  function bindDrag(target) {
+    target.addEventListener('pointerdown', function (e) {
+      if (!e.target.classList || !e.target.classList.contains('dial-grab')) return;
+      e.preventDefault();
+      try { target.setPointerCapture(e.pointerId); } catch (_) { /* 비활성 포인터(합성 이벤트) */ }
+      drag = { id: e.pointerId, theta: pointerAngle(e), sReal: state };
+      svg.classList.add('dragging');
+      closeAnswer();
+    });
+    target.addEventListener('pointermove', function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      const th = pointerAngle(e);
+      let d = th - drag.theta;
+      if (d > 180) d -= 360;
+      else if (d <= -180) d += 360;
+      drag.theta = th;
+      drag.sReal += d / 3.6;
+      if (drag.sReal < STATE_MIN) drag.sReal = STATE_MIN;
+      if (drag.sReal > STATE_MAX) drag.sReal = STATE_MAX;
+      setState(Math.round(drag.sReal));
+    });
+    function end(e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      drag = null;
+      svg.classList.remove('dragging');
+      if (zoomed) setViewBox();
+    }
+    target.addEventListener('pointerup', end);
+    target.addEventListener('pointercancel', end);
+    // 키보드: ←/→ 1눈금, Shift 10눈금
+    target.addEventListener('keydown', function (e) {
+      const step = e.shiftKey ? 10 : 1;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { setState(state + step); e.preventDefault(); }
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { setState(state - step); e.preventDefault(); }
+    });
+  }
+
+  function setState(s) {
+    s = Math.max(STATE_MIN, Math.min(STATE_MAX, Math.round(s)));
+    if (s !== state) closeAnswer();
+    state = s;
+    draw();
+  }
+  function closeAnswer() { if (ans) ans.classList.remove('open'); }
+
+  function reveal() {
+    const a = answer(state);
+    ans.innerHTML = '<div class="gw-value">' + a.valueText + ' mm</div><div>' + a.text + '</div>' +
+      (a.note ? '<div class="dial-warn">' + a.note + '</div>' : '');
+    ans.classList.toggle('open');
+    if (ans.classList.contains('open') && ans.getBoundingClientRect) {
+      const r = ans.getBoundingClientRect();
+      if (r.top < 0 || r.bottom > (window.innerHeight || document.documentElement.clientHeight)) {
+        ans.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+  }
+  function newProblem() {
+    closeAnswer();
+    state = randomState();
+    draw();
+  }
+
+  function setMotion(cont) {
+    smallContinuous = cont;
+    contBtn.setAttribute('aria-pressed', String(cont));
+    stepBtn.setAttribute('aria-pressed', String(!cont));
+    closeAnswer();                     // 설명문(주의 문구)이 모드에 따라 달라지므로 닫음
+    draw();
+  }
+
+  function mount(el_) {
+    root = el_;
+    root.innerHTML =
+      '<div class="dial-wrap">' +
+      '<h2>' + TITLE + ' (0.01 mm)</h2>' +
+      '<p class="dial-help">측정 범위 0~9.99 mm · 다이얼을 잡고 돌려 큰 바늘을 움직인 뒤, 작은 바늘(mm)과 큰 바늘(0.01 mm)을 읽어 보세요.</p>' +
+      '<details class="dial-note" id="' + P + 'tip"><summary>읽는 요령 · 99→100 경계 주의</summary><p>작은 바늘은 큰 바늘과 함께 조금씩 움직여 숫자 사이에 걸려 있을 수 있습니다. 이때는 <b>지나온(작은) 숫자</b>를 읽습니다. ' +
+      '큰 바늘이 90~99 근처면 작은 바늘이 다음 숫자에 거의 닿아 있어도 아직 넘지 않은 것이므로 1mm 더 읽지 않도록 주의하세요(예: 0.99 mm를 1.99 mm로 읽는 실수).</p></details>' +
+      '<svg class="gw-svg" id="' + P + 'svg" viewBox="0 0 ' + VB_W + ' ' + VB_H + '" tabindex="0" role="img" aria-label="다이얼게이지 눈금"></svg>' +
+      '<div class="gw-bar"><button class="primary" id="' + P + 'reveal">정답확인</button>' +
+      '<button id="' + P + 'new">새 문제</button>' +
+      '<button id="' + P + 'zoom" aria-pressed="false">확대</button></div>' +
+      '<div class="gw-bar"><span class="gw-opt" role="group" aria-label="작은 바늘 움직임">작은 바늘:' +
+      '<button id="' + P + 'mcont" aria-pressed="true" title="큰 바늘이 도는 만큼 작은 바늘도 연속으로 움직입니다(실제 계기와 같음)">연속 이동(기본)</button>' +
+      '<button id="' + P + 'mstep" aria-pressed="false" title="큰 바늘이 0을 지날 때만 작은 바늘이 1눈금씩 넘어갑니다">계단식</button></span></div>' +
+      '<div class="gw-answer" id="' + P + 'ans"></div>' +
+      '</div>';
+    svg = root.querySelector('#' + P + 'svg');
+    ans = root.querySelector('#' + P + 'ans');
+    zoomBtn = root.querySelector('#' + P + 'zoom');
+    contBtn = root.querySelector('#' + P + 'mcont');
+    stepBtn = root.querySelector('#' + P + 'mstep');
+    // 읽는 요령: 넓은 화면(태블릿·데스크톱)은 펼친 상태, 휴대폰 폭에서는 접어서 첫 화면에 다이얼+버튼이 들어오게 함
+    try {
+      if (window.matchMedia && window.matchMedia('(min-width: 600px) and (min-height: 1000px)').matches) {
+        root.querySelector('#' + P + 'tip').open = true;
+      }
+    } catch (_) {}
+    root.querySelector('#' + P + 'reveal').onclick = reveal;
+    root.querySelector('#' + P + 'new').onclick = newProblem;
+    zoomBtn.onclick = function () {
+      zoomed = !zoomed;
+      zoomBtn.setAttribute('aria-pressed', String(zoomed));
+      setViewBox();
+    };
+    contBtn.onclick = function () { setMotion(true); };
+    stepBtn.onclick = function () { setMotion(false); };
+    buildSvg();
+    bindDrag(svg);
+    setMotion(smallContinuous);
+    newProblem();
+  }
+
+  window.GaugeWidget = { id: ID, title: TITLE, mount: mount, newProblem: newProblem, reveal: reveal, answer: answer };
+  document.addEventListener('DOMContentLoaded', function () {
+    const r = document.getElementById('gw-root');
+    if (r) mount(r);
+  });
+})();
+</script>
+</body>
+</html>

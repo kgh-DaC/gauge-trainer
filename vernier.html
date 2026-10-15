@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>버니어캘리퍼스 눈금읽기</title>
+<style>
+  :root { --bg:#fff; --fg:#1f2328; --muted:#656d76; --line:#d0d7de; --accent:#0969da; --ok:#1a7f37;
+          --tick:#111; --hl:#d1242f; --win:#0969da; --edge:#5f6a75;
+          --m1:#fbfcfd; --m2:#dfe4e9; --m3:#c4ccd4; --m4:#8f9aa5;
+          --s1:#eef1f4; --s2:#cbd2d9; --s3:#adb7c1; --s4:#7b8792;
+          --p1:#f7f9fb; --p2:#e3e8ed; --p3:#cfd6dd;
+          --k1:#6b7580; --k2:#3e464f; --k3:#262c33; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --line:#30363d; --accent:#4493f8; --ok:#3fb950;
+          --tick:#f0f3f6; --hl:#ff7b72; --win:#4493f8; --edge:#151a20;
+          --m1:#6a7581; --m2:#4b5560; --m3:#3c4550; --m4:#262d35;
+          --s1:#76818d; --s2:#56616c; --s3:#46505a; --s4:#2c333b;
+          --p1:#5d6874; --p2:#4a545f; --p3:#3b444e;
+          --k1:#4b5560; --k2:#2a3139; --k3:#14181d; } }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, "Malgun Gothic", sans-serif; }
+  .gw-wrap { max-width:1000px; margin:0 auto; }
+  .gw-wrap h2 { margin:0 0 4px; font-size:1.3em; }
+  .gw-hint { color:var(--muted); font-size:.9em; margin:0 0 8px; }
+  .gw-svg { width:100%; height:auto; touch-action:none; user-select:none; -webkit-user-select:none; display:block; }
+  .gw-svg:focus { outline:2px solid var(--accent); outline-offset:2px; }
+  .gw-zoombox { border:1px solid var(--line); border-radius:8px; padding:8px; margin-top:8px; }
+  .gw-zoomhead { display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:.9em; color:var(--muted); margin-bottom:6px; }
+  .gw-bar { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; align-items:center; }
+  .gw-seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .gw-seg button { border:0; border-radius:0; padding:6px 12px; }
+  .gw-seg button + button { border-left:1px solid var(--line); }
+  .gw-seg button.on { background:var(--accent); color:#fff; }
+  button { font:inherit; padding:8px 14px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--fg); cursor:pointer; }
+  button:disabled { opacity:.35; cursor:not-allowed; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .gw-answer { display:none; padding:12px; border:1px solid var(--ok); border-radius:8px; }
+  .gw-answer.open { display:block; }
+  .gw-value { font-size:1.6em; font-weight:700; color:var(--ok); }
+  .gw-sub { color:var(--muted); }
+  .gw-pan { display:none; align-items:center; gap:6px; }
+  .gw-pan.show { display:inline-flex; }
+  .gw-pan input { width:160px; }
+  .gw-grab { cursor:grab; }
+  .gw-grab:active { cursor:grabbing; }
+  .gw-zsvg { cursor:ew-resize; }
+  .gw-tick { stroke:var(--tick); }
+  .gw-num { fill:var(--tick); font-family:system-ui, "Malgun Gothic", sans-serif; text-anchor:middle; }
+  .gw-hlt { stroke:var(--hl); }
+  .gw-hln { fill:var(--hl); }
+  .gw-winr { fill:none; stroke:var(--win); stroke-width:1.5; stroke-dasharray:5 3; }
+  .gw-edge { stroke:var(--edge); stroke-width:1; stroke-linejoin:round; }
+  .gw-knurl { stroke:var(--k3); stroke-width:1; opacity:.55; }
+  .gw-lbl { fill:var(--muted); font-family:system-ui, "Malgun Gothic", sans-serif; }
+  .gw-stage { display:flex; flex-direction:column; }
+  /* 좁은 화면(JS가 .gw-narrow 부여): 확대 창 → 버튼 → 정답 → 슬라이더 주변 그림 순서 */
+  .gw-narrow .gw-zoombox { order:1; margin-top:0; padding:6px; }
+  .gw-narrow .gw-ctl { order:2; display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:10px 0; }
+  .gw-narrow .gw-ctl button { padding:10px 6px; white-space:nowrap; }
+  .gw-narrow .gw-answer { order:3; margin-bottom:10px; }
+  .gw-narrow .gw-main { order:4; }
+  .gw-narrow .gw-hint { font-size:.82em; }
+  .gw-narrow .gw-seg button { padding:6px 9px; }
+  .gw-narrow .gw-zoomhead { gap:6px; }
+  .gw-narrow .gw-pan { flex:1 1 100%; }
+  .gw-narrow .gw-pan input { flex:1; width:auto; min-width:0; }
+  .gw-narrow .gw-value { font-size:1.4em; }
+</style>
+</head>
+<body>
+<div id="gw-root"></div>
+<script>
+(function () {
+  'use strict';
+  const ID = 'vernier';
+  const TITLE = '버니어캘리퍼스';
+  const NS = 'vernier-';
+
+  // ---- 화면/기구 상수 (정수 단위 1/100 mm) ----
+  const MAIN_MAX_MM = 150;      // 본척 눈금은 0~150mm만 그림 (15cm)
+  const BEAM_END = 15500;       // 본척 몸체 끝(눈금 없음) = 155mm
+  const TAIL = 400;             // 부척 0번 선 ~ 슬라이더 오른쪽 끝 = SPAN + 4mm
+  const PLATE = 200;            // 부척 마지막 선 ~ 부척판 끝 = 2mm
+  const MARGIN = 200;           // 슬라이더 끝 ~ 150mm 선 여유 2mm (숫자 15가 가려지지 않게)
+
+  // ---- 옵션 (명세 1절). MAX = 150mm − SPAN − TAIL − MARGIN : 슬라이더가 148mm를 넘지 않도록 ----
+  const OPTS = {
+    '20': { key: '20', label: '1/20 (0.05mm)', STEP: 5, DIV: 20, SPAN: 1900, RES: '0.05', NUM_EVERY: 2, MAX: 12500 },
+    '50': { key: '50', label: '1/50 (0.02mm)', STEP: 2, DIV: 50, SPAN: 4900, RES: '0.02', NUM_EVERY: 5, MAX: 9500 }
+  };
+  let opt = OPTS['20'];                  // 기본: 1/20형
+  const STATE_MIN = 0;
+
+  // ---- 상태: x (슬라이드 위치, 1/100 mm 정수, x % STEP == 0, 0 ≤ x ≤ opt.MAX) ----
+  let state = 0, last = -1, revealed = false;
+
+  // ---- 명세 함수 ----
+  function pitch() { return opt.SPAN / opt.DIV; }        // 95 또는 98 (정수)
+  function fmt(u) { return Math.floor(u / 100) + '.' + String(u % 100).padStart(2, '0'); }
+  function gwa(k) { return [0, 1, 3, 6, 7, 8].indexOf(k % 10) >= 0 ? '과' : '와'; }   // 받침 유무에 따른 조사
+  function answer(s, o) {
+    o = o || opt;
+    const M = Math.floor(s / 100);
+    const r = s % 100;
+    const n = Math.round(r / o.STEP);
+    const value = M * 100 + n * o.STEP;
+    let sub;
+    if (o.NUM_EVERY === 2) {
+      sub = (n % 2 === 0) ? '(부척 숫자 ' + (n / 2) + ' 위치)'
+                          : '(부척 숫자 ' + ((n - 1) / 2) + gwa((n - 1) / 2) + ' ' + ((n + 1) / 2) + ' 사이)';
+    } else {
+      sub = (n % 5 === 0) ? '(부척 숫자 ' + (n / 5) + ' 위치)'
+                          : '(부척 숫자 ' + Math.floor(n / 5) + '에서 ' + (n % 5) + '칸 오른쪽)';
+    }
+    return { M: M, n: n, value: value, valueText: fmt(value) + ' mm',
+             text: '본척 ' + M + 'mm + 부척 ' + n + '번째 선 × ' + o.RES + 'mm = ' + fmt(value) + 'mm', sub: sub };
+  }
+  function randInt(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
+  function randomState() {
+    const MX = opt.MAX / 100;            // 125 또는 95 (mm)
+    let s;
+    do {
+      const r = Math.random();
+      if (r < 0.70) s = randInt(0, opt.MAX / opt.STEP) * opt.STEP;               // 균등
+      else if (r < 0.85) s = randInt(0, MX) * 100;                                // n = 0
+      else s = randInt(0, MX - 1) * 100 + (opt.DIV - 1) * opt.STEP;               // n = 최대
+    } while (s === last);
+    last = s;
+    return s;
+  }
+
+  // ---- 화면 좌표 (전체 보기): 5.6 px/mm → 1/100mm 당 0.056 ----
+  const X0 = 72, PXU = 0.056;
+  function sx(u) { return X0 + u * PXU; }
+  const BEAM_L = X0 - 60;                // 본척 몸체 왼쪽 끝(고정 조 뒤)
+  const BEAM_R = sx(BEAM_END);           // 본척 몸체 오른쪽 끝
+  const Y_BT = 80, Y_SC = 160;           // 본척 윗면, 본척 눈금 기준선(=부척 윗변)
+
+  // 확대 창: 폭 ZW viewBox(데스크톱 1000, 좁은 화면 500 → 같은 폭에서 2배 높이), 창 폭 W(1/100mm)
+  let mag = 1, pan = 0, winLeft = 0;
+  // 좁은 화면(폭 < 640px) 모드: 확대 창을 맨 위·크게, 전체 그림은 슬라이더 주변(VW 폭)만 보여 줌
+  const NARROW_PX = 640;
+  let narrow = false, ZW = 1000, VW = 1000, mvx = 0;
+  function winW() { return (opt.SPAN + 1000) / mag; }
+  function zk() { return ZW / winW(); }
+  function zx(u) { return (u - winLeft) * zk(); }
+  function trackInterval() {
+    const W = winW();
+    if (mag === 1) return [state - 200, state + opt.SPAN + 200];
+    const f = state + pan * pitch();
+    return [f - 0.3 * W, f + 0.3 * W];
+  }
+  function followWindow() {
+    const t = trackInterval(), W = winW();
+    if (t[0] < winLeft) winLeft = t[0];
+    if (t[1] > winLeft + W) winLeft = t[1] - W;
+  }
+  function recenter() {
+    const t = trackInterval();
+    winLeft = (t[0] + t[1]) / 2 - winW() / 2;
+  }
+
+  let root, svg, zsvg, gDyn, gZoom, ans, panBox, panInput, panLbl, btnMinus, btnPlus, hintEl;
+  function mount(el) {
+    root = el;
+    el.innerHTML =
+      '<div class="gw-wrap">' +
+      '<h2>' + TITLE + ' 눈금읽기</h2>' +
+      '<p class="gw-hint" id="' + NS + 'hint"></p>' +
+      '<div class="gw-bar"><span>부척</span><div class="gw-seg" id="' + NS + 'opt">' +
+        '<button data-o="20">' + OPTS['20'].label + '</button><button data-o="50">' + OPTS['50'].label + '</button></div></div>' +
+      '<div class="gw-stage">' +
+      '<svg class="gw-svg gw-main" id="' + NS + 'svg" viewBox="0 0 1000 340" tabindex="0" role="img" aria-label="버니어캘리퍼스 전체 모습. 화살표 키로 슬라이더 미세 이동"></svg>' +
+      '<div class="gw-zoombox">' +
+        '<div class="gw-zoomhead"><span id="' + NS + 'ztitle"></span>' +
+          '<div class="gw-seg" id="' + NS + 'mag"><button data-m="1">×1</button><button data-m="2">×2</button><button data-m="4">×4</button><button data-m="8">×8</button><button data-m="16">×16</button></div>' +
+          '<label class="gw-pan" id="' + NS + 'panbox">보는 위치 <input type="range" id="' + NS + 'pan" min="0" step="1"> <span id="' + NS + 'panlbl"></span></label>' +
+        '</div>' +
+        '<svg class="gw-svg gw-zsvg" id="' + NS + 'zsvg" viewBox="0 0 1000 200"></svg>' +
+      '</div>' +
+      '<div class="gw-bar gw-ctl">' +
+        '<button id="' + NS + 'minus">◀ −</button><button id="' + NS + 'plus">+ ▶</button>' +
+        '<button class="primary" id="' + NS + 'reveal">정답확인</button>' +
+        '<button id="' + NS + 'new">새 문제</button></div>' +
+      '<div class="gw-answer" id="' + NS + 'ans"></div>' +
+      '</div></div>';
+    svg = el.querySelector('#' + NS + 'svg');
+    zsvg = el.querySelector('#' + NS + 'zsvg');
+    ans = el.querySelector('#' + NS + 'ans');
+    hintEl = el.querySelector('#' + NS + 'hint');
+    panBox = el.querySelector('#' + NS + 'panbox');
+    panInput = el.querySelector('#' + NS + 'pan');
+    panLbl = el.querySelector('#' + NS + 'panlbl');
+    btnMinus = el.querySelector('#' + NS + 'minus');
+    btnPlus = el.querySelector('#' + NS + 'plus');
+    el.querySelector('#' + NS + 'reveal').onclick = reveal;
+    el.querySelector('#' + NS + 'new').onclick = newProblem;
+    btnMinus.onclick = function () { setState(state - opt.STEP); };
+    btnPlus.onclick = function () { setState(state + opt.STEP); };
+    el.querySelectorAll('#' + NS + 'opt button').forEach(function (b) {
+      b.onclick = function () { setOption(b.getAttribute('data-o')); };
+    });
+    el.querySelectorAll('#' + NS + 'mag button').forEach(function (b) {
+      b.onclick = function () { setMag(parseInt(b.getAttribute('data-m'), 10)); };
+    });
+    panInput.oninput = function () { pan = parseInt(panInput.value, 10); recenter(); updatePanLabel(); draw(); };
+    svg.addEventListener('keydown', function (e) {
+      let d = 0;
+      if (e.key === 'ArrowLeft') d = -1; else if (e.key === 'ArrowRight') d = 1; else return;
+      e.preventDefault();
+      setState(state + d * (e.shiftKey ? 100 : opt.STEP));
+    });
+    buildStatic();
+    bindDrag();
+    layout(true);
+    setOption('20', true);
+    // 폭이 바뀌면(회전, 탭 전환으로 처음 보이게 될 때 등) 배치를 다시 정한다
+    if (window.ResizeObserver) new ResizeObserver(function () { layout(false); }).observe(el);
+    else window.addEventListener('resize', function () { layout(false); });
+  }
+
+  // ---- 화면 폭에 따른 배치 ----
+  function defaultMag(k) {
+    if (narrow) return k === '50' ? 16 : 4;                 // 좁은 화면: 확대 창이 주 화면
+    return k === '50' ? Math.max(mag, 8) : Math.min(mag, 4); // 데스크톱: 1/50형 ×8 이상, 1/20형 최대 ×4
+  }
+  function layout(initial) {
+    const w = root.getBoundingClientRect().width;
+    if (!w) return;                                         // 숨겨진 탭 안: 보일 때 다시 호출됨
+    const n = w < NARROW_PX;
+    if (!initial && n === narrow) return;
+    narrow = n;
+    ZW = n ? 500 : 1000;
+    VW = n ? 440 : 1000;
+    root.querySelector('.gw-wrap').classList.toggle('gw-narrow', n);
+    zsvg.setAttribute('viewBox', '0 0 ' + ZW + ' 200');
+    root.querySelector('#' + NS + 'ztitle').textContent = n
+      ? '확대 창 — 끌면 슬라이더가 움직입니다'
+      : '확대 창 (점선 영역) — 여기서 끌어도 슬라이더가 움직입니다';
+    if (initial) return;                                    // 첫 배치는 setOption이 이어서 그림
+    setMag(defaultMag(opt.key), true);
+    recenter();
+    mainFollow(true);
+    draw();
+  }
+  // 좁은 화면에서 전체 그림의 보이는 구간(mvx ~ mvx+VW)이 슬라이더를 따라가게 한다
+  function mainFollow(reset) {
+    if (!narrow) { mvx = 0; }
+    else {
+      const lo = sx(state) - 45, hi = sx(state + opt.SPAN + TAIL) + 12;
+      if (reset) mvx = (lo + hi) / 2 - VW / 2;
+      else { if (lo < mvx) mvx = lo; if (hi > mvx + VW) mvx = hi - VW; }
+      mvx = Math.max(0, Math.min(1000 - VW, mvx));
+    }
+    svg.setAttribute('viewBox', r1(mvx) + ' 0 ' + VW + ' 340');
+  }
+
+  function setOption(k, silent) {
+    opt = OPTS[k];
+    last = -1;
+    root.querySelectorAll('#' + NS + 'opt button').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-o') === k); });
+    btnMinus.textContent = '◀ −' + opt.RES + 'mm';
+    btnPlus.textContent = '+' + opt.RES + 'mm ▶';
+    hintEl.textContent = '슬라이더(아들자·이동 조)를 끌어 원하는 위치에 놓고 값을 읽어 보세요. 어미자(본척) 숫자는 cm 단위입니다(1 = 10mm). ' +
+      '측정 범위: 0 ~ ' + fmt(opt.MAX) + 'mm (본척 0~150mm 안에 아들자가 모두 들어오는 범위).';
+    panInput.max = String(opt.DIV);
+    pan = Math.round(opt.DIV / 2);
+    panInput.value = String(pan);
+    setMag(defaultMag(k), true);
+    newProblem();
+  }
+  function setMag(m, silent) {
+    if (opt.key === '20' && m > 4) m = 4;   // 1/20형은 ×8/×16 사용 안 함
+    mag = m;
+    root.querySelectorAll('#' + NS + 'mag button').forEach(function (b) {
+      const bm = parseInt(b.getAttribute('data-m'), 10);
+      b.classList.toggle('on', bm === m);
+      b.disabled = opt.key === '20' && bm > 4;
+    });
+    panBox.classList.toggle('show', m > 1);
+    if (revealed) { pan = answer(state).n; panInput.value = String(pan); }   // 정답이 열려 있으면 일치선을 창 안에
+    updatePanLabel();
+    if (!silent) { recenter(); draw(); }
+  }
+  function updatePanLabel() { panLbl.textContent = '부척 ' + pan + '번 선 부근'; }
+
+  // ---- 드래그 (Pointer Events) ----
+  // 포인터 이동량은 화면 px(clientX) 기준으로 잰다. 좁은 화면에서 전체 그림의 viewBox가
+  // 슬라이더를 따라 움직여도 드래그 계산이 흔들리지 않게 하기 위함.
+  let drag = null;
+  function bindDrag() {
+    svg.addEventListener('pointerdown', function (e) {
+      if (!e.target.closest || !e.target.closest('.gw-grab')) return;
+      startDrag(svg, e, VW / svg.getBoundingClientRect().width / PXU);
+    });
+    zsvg.addEventListener('pointerdown', function (e) { startDrag(zsvg, e, ZW / zsvg.getBoundingClientRect().width / zk()); });
+    [svg, zsvg].forEach(function (s) {
+      s.addEventListener('pointermove', function (e) {
+        if (!drag || drag.el !== s || drag.id !== e.pointerId) return;
+        e.preventDefault();
+        setState(drag.s0 + (e.clientX - drag.v0) * drag.scale);
+      });
+      const end = function (e) {
+        if (drag && drag.el === s && drag.id === e.pointerId) {
+          try { s.releasePointerCapture(e.pointerId); } catch (_) {}
+          drag = null;
+        }
+      };
+      s.addEventListener('pointerup', end);
+      s.addEventListener('pointercancel', end);
+      s.addEventListener('lostpointercapture', function () { if (drag && drag.el === s) drag = null; });
+    });
+  }
+  function startDrag(el, e, scale) {
+    e.preventDefault();
+    drag = { el: el, id: e.pointerId, v0: e.clientX, s0: state, scale: scale };
+    try { el.setPointerCapture(e.pointerId); } catch (_) {}
+    if (el === svg) svg.focus({ preventScroll: true });
+  }
+
+  function setState(s) {
+    const ns = Math.max(STATE_MIN, Math.min(opt.MAX, Math.round(s / opt.STEP) * opt.STEP));
+    if (ns === state) return;            // 값이 실제로 바뀔 때만 정답 패널을 닫는다
+    state = ns;
+    closeAnswer();
+    followWindow();
+    mainFollow(false);
+    draw();
+  }
+  function closeAnswer() { revealed = false; ans.classList.remove('open'); }
+
+  // ---- 그리기 도우미 ----
+  function r1(v) { return Math.round(v * 1000) / 1000; }
+  function line(x, y1, y2, w, cls, data) {
+    x = r1(x);
+    return '<line class="' + (cls || 'gw-tick') + '"' + (data || '') + ' x1="' + x + '" x2="' + x + '" y1="' + y1 + '" y2="' + y2 + '" stroke-width="' + w + '"/>';
+  }
+  function text(x, y, s, size, cls) {
+    return '<text class="' + (cls || 'gw-num') + '" x="' + r1(x) + '" y="' + y + '" font-size="' + size + '">' + s + '</text>';
+  }
+  function stops(a) {
+    return a.map(function (p) { return '<stop offset="' + p[0] + '" style="stop-color:var(' + p[1] + ')"/>'; }).join('');
+  }
+  function vgrad(id, a) { return '<linearGradient id="' + NS + id + '" x1="0" y1="0" x2="0" y2="1">' + stops(a) + '</linearGradient>'; }
+  function hgrad(id, a) { return '<linearGradient id="' + NS + id + '" x1="0" y1="0" x2="1" y2="0">' + stops(a) + '</linearGradient>'; }
+  function url(id) { return 'url(#' + NS + id + ')'; }
+  function defs(p) {
+    // p: 접두어 (전체 보기 'o', 확대 창 'z') — 같은 문서 안 id 충돌 방지
+    const METAL = [[0, '--m1'], [0.18, '--m2'], [0.55, '--m3'], [0.82, '--m2'], [1, '--m4']];
+    return '<defs>' +
+      vgrad(p + 'beam', METAL) +
+      vgrad(p + 'slide', [[0, '--s1'], [0.25, '--s2'], [0.7, '--s3'], [1, '--s4']]) +
+      vgrad(p + 'plate', [[0, '--p1'], [0.6, '--p2'], [1, '--p3']]) +
+      hgrad(p + 'jawL', [[0, '--m4'], [0.35, '--m2'], [0.8, '--m1'], [1, '--m3']]) +
+      hgrad(p + 'jawR', [[0, '--s1'], [0.3, '--s2'], [0.75, '--s3'], [1, '--s4']]) +
+      vgrad(p + 'knob', [[0, '--k1'], [0.5, '--k2'], [1, '--k3']]) +
+      vgrad(p + 'rod', [[0, '--m1'], [0.5, '--m3'], [1, '--m4']]) +
+      '<radialGradient id="' + NS + p + 'roll" cx="0.4" cy="0.35" r="0.7">' + stops([[0, '--k1'], [0.6, '--k2'], [1, '--k3']]) + '</radialGradient>' +
+      '<filter id="' + NS + p + 'sh" x="-10%" y="-10%" width="130%" height="130%"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-color="#000" flood-opacity=".3"/></filter>' +
+      '<linearGradient id="' + NS + p + 'fadeG" gradientUnits="userSpaceOnUse" x1="955" y1="0" x2="1000" y2="0"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>' +
+      '<mask id="' + NS + p + 'fade" maskUnits="userSpaceOnUse" x="0" y="0" width="1000" height="400"><rect x="0" y="0" width="1000" height="400" fill="url(#' + NS + p + 'fadeG)"/></mask>' +
+      '</defs>';
+  }
+
+  // ---- 그리기: 정적 부분 (어미자/본척 + 고정 조) ----
+  function buildStatic() {
+    let h = defs('o');
+    // 깊이바(본척 끝에서 x만큼 나옴) — 동적, 본척 뒤에
+    h += '<g id="' + NS + 'rod"></g>';
+    // 고정 내측 조(위)
+    h += '<path fill="' + url('ojawL') + '" class="gw-edge" d="M' + X0 + ' ' + (Y_BT + 2) + ' V12 H' + (X0 - 8) + ' L' + (X0 - 12) + ' 30 C' + (X0 - 14) + ' 56 ' + (X0 - 28) + ' 74 ' + (X0 - 56) + ' ' + (Y_BT + 2) + ' Z"/>';
+    // 고정 외측 조(아래)
+    h += '<path fill="' + url('ojawL') + '" class="gw-edge" d="M' + BEAM_L + ' ' + (Y_SC - 2) + ' V200 Q' + (BEAM_L + 8) + ' 262 ' + (X0 - 8) + ' 328 L' + X0 + ' 332 V' + (Y_SC - 2) + ' Z"/>';
+    // 어미자 몸체
+    h += '<rect fill="' + url('obeam') + '" class="gw-edge" x="' + BEAM_L + '" y="' + Y_BT + '" width="' + r1(BEAM_R - BEAM_L) + '" height="' + (Y_SC - Y_BT) + '" rx="3"/>';
+    h += '<line x1="' + (BEAM_L + 2) + '" x2="' + r1(BEAM_R - 2) + '" y1="' + (Y_BT + 1.5) + '" y2="' + (Y_BT + 1.5) + '" stroke="#fff" stroke-opacity=".5" stroke-width="1"/>';
+    // 본척 눈금 0~150mm
+    for (let mm = 0; mm <= MAIN_MAX_MM; mm++) {
+      const x = sx(mm * 100);
+      const len = mm % 10 === 0 ? 26 : (mm % 5 === 0 ? 17 : 10);
+      h += line(x, Y_SC - len, Y_SC, mm % 10 === 0 ? 1.3 : 0.9, 'gw-tick', ' data-m="' + mm + '"');
+      if (mm % 10 === 0) h += text(x, Y_SC - 34, String(mm / 10), 16);
+    }
+    h += text(X0 - 32, Y_SC - 34, 'cm', 11, 'gw-lbl');
+    h += '<g id="' + NS + 'dyn"></g>';
+    svg.innerHTML = h;
+    gDyn = svg.querySelector('#' + NS + 'dyn');
+    zsvg.innerHTML = defs('z') + '<g id="' + NS + 'zg"></g>';
+    gZoom = zsvg.querySelector('#' + NS + 'zg');
+  }
+
+  // ---- 그리기: 상태에서만 ----
+  function draw() {
+    const P = pitch(), a = revealed ? answer(state) : null;
+    const x0 = sx(state);                          // 부척 0번 선 = 이동 조 측정면
+    const xe = sx(state + opt.SPAN);               // 부척 마지막 선
+    const xp = sx(state + opt.SPAN + PLATE);         // 부척판 오른쪽 끝
+    const xr = sx(state + opt.SPAN + TAIL);        // 슬라이더 오른쪽 끝 (≤ 148mm)
+
+    // 깊이바: 본척 끝에서 x만큼 돌출 (화면 오른쪽 끝에서 흐려짐)
+    const rodLen = state * PXU;
+    svg.querySelector('#' + NS + 'rod').innerHTML = rodLen > 0.5
+      ? '<g mask="url(#' + NS + 'ofade)"><rect fill="' + url('orod') + '" class="gw-edge" x="' + r1(BEAM_R - 3) + '" y="112" width="' + r1(rodLen + 3) + '" height="8" rx="1"/></g>' +
+        '<text class="gw-lbl" x="' + r1(BEAM_R + 4) + '" y="133" font-size="9">깊이바</text>'
+      : '';
+
+    let h = '<g class="gw-grab" filter="url(#' + NS + 'osh)">';
+    // 윗 레일 + 오른쪽 프레임
+    h += '<rect fill="' + url('oslide') + '" class="gw-edge" x="' + r1(x0) + '" y="' + (Y_BT - 12) + '" width="' + r1(xr - x0) + '" height="18" rx="3"/>';
+    h += '<rect fill="' + url('oslide') + '" class="gw-edge" x="' + r1(xr - 10) + '" y="' + (Y_BT - 12) + '" width="10" height="' + (Y_SC + 78 - Y_BT + 12) + '" rx="3"/>';
+    // 잠금나사 (레일 위)
+    const kc = x0 + Math.max(70, (xr - x0) * 0.55);
+    h += '<rect fill="' + url('oknob') + '" class="gw-edge" x="' + r1(kc - 5) + '" y="' + (Y_BT - 18) + '" width="10" height="7"/>';
+    h += '<rect fill="' + url('oknob') + '" class="gw-edge" x="' + r1(kc - 13) + '" y="' + (Y_BT - 34) + '" width="26" height="17" rx="3"/>';
+    for (let i = -10; i <= 10; i += 4) h += '<line class="gw-knurl" x1="' + r1(kc + i) + '" x2="' + r1(kc + i) + '" y1="' + (Y_BT - 32) + '" y2="' + (Y_BT - 19) + '"/>';
+    // 이동 내측 조(위)
+    h += '<path fill="' + url('ojawR') + '" class="gw-edge" d="M' + r1(x0) + ' ' + (Y_BT + 6) + ' V12 H' + r1(x0 + 8) + ' L' + r1(x0 + 12) + ' 30 C' + r1(x0 + 14) + ' 56 ' + r1(x0 + 26) + ' 66 ' + r1(x0 + 52) + ' ' + (Y_BT - 10) + ' V' + (Y_BT + 6) + ' Z"/>';
+    // 이동 외측 조 + 슬라이더 몸체(아래)
+    h += '<path fill="' + url('ojawR') + '" class="gw-edge" d="M' + r1(x0) + ' ' + Y_SC + ' H' + r1(xr) + ' V' + (Y_SC + 78) + ' H' + r1(x0 + 66) + ' Q' + r1(x0 + 54) + ' 292 ' + r1(x0 + 8) + ' 328 L' + r1(x0) + ' 332 Z"/>';
+    // 엄지 롤러 (슬라이더 아래, 움직이면 회전)
+    const rc = xr - 26, ry = Y_SC + 86, rr = 15, ang = (x0 - X0) / rr;
+    h += '<rect fill="' + url('oslide') + '" class="gw-edge" x="' + r1(rc - 20) + '" y="' + (Y_SC + 70) + '" width="40" height="14" rx="3"/>';
+    h += '<circle fill="' + url('oroll') + '" class="gw-edge" cx="' + r1(rc) + '" cy="' + ry + '" r="' + rr + '"/>';
+    for (let i = 0; i < 18; i++) {
+      const t = ang + i * Math.PI / 9, c = Math.cos(t), s = Math.sin(t);
+      h += '<line class="gw-knurl" x1="' + r1(rc + c * (rr - 5)) + '" y1="' + r1(ry + s * (rr - 5)) + '" x2="' + r1(rc + c * rr) + '" y2="' + r1(ry + s * rr) + '"/>';
+    }
+    h += '<circle cx="' + r1(rc) + '" cy="' + ry + '" r="3" fill="var(--k3)"/>';
+    // 아들자(부척) 판
+    h += '<rect fill="' + url('oplate') + '" class="gw-edge" x="' + r1(x0) + '" y="' + Y_SC + '" width="' + r1(xp - x0) + '" height="50" rx="1"/>';
+    h += '<line x1="' + r1(x0) + '" x2="' + r1(xp) + '" y1="' + (Y_SC + 0.5) + '" y2="' + (Y_SC + 0.5) + '" stroke="var(--edge)" stroke-width="1"/>';
+    const vfs = Math.min(12, r1(P * opt.NUM_EVERY * PXU * 0.9));
+    for (let i = 0; i <= opt.DIV; i++) {
+      const isNum = i % opt.NUM_EVERY === 0;
+      const x = sx(state + i * P);
+      h += line(x, Y_SC, Y_SC + (isNum ? 15 : 9), isNum ? 1.1 : 0.8, 'gw-tick', ' data-v="' + i + '"');
+      if (isNum) h += text(x, Y_SC + 28, String(i / opt.NUM_EVERY), vfs);
+    }
+    h += text(r1((x0 + xe) / 2), Y_SC + 44, opt.RES + 'mm', 9, 'gw-lbl');
+    // 잡기 영역(투명)
+    h += '<rect x="' + r1(x0 - 4) + '" y="8" width="' + r1(xr - x0 + 8) + '" height="328" fill="transparent"/>';
+    h += '</g>';
+    // 확대 창 영역 표시
+    const W = winW();
+    const wl = Math.max(sx(winLeft), BEAM_L), wr = Math.min(sx(winLeft + W), BEAM_R);
+    if (wr > wl) h += '<rect class="gw-winr" x="' + r1(wl) + '" y="' + (Y_BT + 30) + '" width="' + r1(wr - wl) + '" height="' + (Y_SC - Y_BT + 30) + '" pointer-events="none"/>';
+    gDyn.innerHTML = h;
+
+    // --- 확대 창 ---
+    const k = zk();
+    const zb = Math.min(ZW + 5, zx(BEAM_END));
+    let z = '';
+    if (zb > -5) z += '<rect fill="' + url('zbeam') + '" class="gw-edge" x="-5" y="-5" width="' + r1(zb + 5) + '" height="105" rx="4"/>';
+    const zl = Math.max(-5, zx(state)), zr = Math.min(ZW + 5, zx(state + opt.SPAN + PLATE));
+    if (zr > zl) z += '<rect fill="' + url('zplate') + '" class="gw-edge" x="' + r1(zl) + '" y="100" width="' + r1(zr - zl) + '" height="105"/>';
+    const zr2 = Math.min(ZW + 5, zx(state + opt.SPAN + TAIL));
+    if (zr2 > zr && zr < ZW + 5) z += '<rect fill="' + url('zslide') + '" class="gw-edge" x="' + r1(zr) + '" y="100" width="' + r1(zr2 - zr) + '" height="105"/>';
+    const mmA = Math.max(0, Math.ceil(winLeft / 100)), mmB = Math.min(MAIN_MAX_MM, Math.floor((winLeft + W) / 100));
+    const fs = k * 100 >= 30 ? 26 : 22;
+    // 선 굵기: 인접 선(±1칸) 화면 어긋남 = STEP×k 의 40% 이하로 (0.8~1.6 viewBox 단위)
+    const tw = Math.min(1.6, Math.max(0.8, 0.4 * opt.STEP * k)), thw = tw * 1.5;
+    for (let mm = mmA; mm <= mmB; mm++) {
+      const x = zx(mm * 100);
+      const len = mm % 10 === 0 ? 42 : (mm % 5 === 0 ? 30 : 20);
+      const hl = a && mm === a.M + a.n;
+      z += line(x, 100 - len, 100, hl ? thw : tw, hl ? 'gw-hlt' : 'gw-tick', ' data-m="' + mm + '"');
+      if (mm % 10 === 0) z += text(x, 46, String(mm / 10), fs);
+    }
+    for (let i = 0; i <= opt.DIV; i++) {
+      const x = zx(state + i * P);
+      if (x < -40 || x > ZW + 40) continue;
+      const isNum = i % opt.NUM_EVERY === 0;
+      const hl = a && i === a.n;
+      z += line(x, 100, 100 + (isNum ? 34 : 20), hl ? thw : tw, hl ? 'gw-hlt' : 'gw-tick', ' data-v="' + i + '"');
+      if (isNum) z += text(x, 160, String(i / opt.NUM_EVERY), 20, hl ? 'gw-num gw-hln' : 'gw-num');
+    }
+    gZoom.innerHTML = z;
+  }
+
+  function reveal() {
+    if (revealed) { closeAnswer(); draw(); return; }
+    const a = answer(state);
+    ans.innerHTML = '<div class="gw-value">' + a.valueText + '</div><div>' + a.text + '</div><div class="gw-sub">' + a.sub + '</div>';
+    revealed = true;
+    ans.classList.add('open');
+    if (mag > 1) { pan = a.n; panInput.value = String(pan); updatePanLabel(); recenter(); }
+    else followWindow();
+    draw();
+  }
+  function newProblem() {
+    state = randomState();
+    closeAnswer();
+    recenter();
+    mainFollow(true);
+    draw();
+  }
+
+  window.GaugeWidget = { id: ID, title: TITLE, mount: mount, newProblem: newProblem, reveal: reveal,
+                         _answer: answer, _opts: OPTS, _getState: function () { return state; },
+                         _setState: function (s) { setState(s); return state; },
+                         _setOption: function (k) { setOption(k); } };
+  function boot() { const el = document.getElementById('gw-root'); if (el && !root) mount(el); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();
+</script>
+</body>
+</html>

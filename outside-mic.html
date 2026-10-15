@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>외측마이크로미터 눈금읽기</title>
+<style>
+  :root { --bg:#fff; --fg:#1f2328; --muted:#656d76; --line:#d0d7de; --accent:#0969da; --ok:#1a7f37; --warn:#9a6700; --panel:#f6f8fa; --stage:#e9edf1; --stage2:#dfe5ea; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --line:#30363d; --accent:#4493f8; --ok:#3fb950; --warn:#d29922; --panel:#161b22; --stage:#1a2028; --stage2:#141920; } }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, "Malgun Gothic", sans-serif; }
+  .gw-wrap { max-width:1000px; margin:0 auto; overflow-wrap:anywhere; }
+  .gw-wrap h2 { margin:0 0 6px; font-size:1.25em; line-height:1.3; }
+  .gw-help { margin:0 0 8px; color:var(--muted); font-size:.9em; }
+  .gw-mode { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:0 0 10px; padding:8px 10px; border:2px solid var(--accent); border-radius:10px; background:var(--panel); }
+  .gw-mode-lab { font-weight:700; margin-right:4px; }
+  .gw-seg { display:inline-flex; max-width:100%; border:1px solid var(--accent); border-radius:8px; overflow:hidden; }
+  .gw-seg button { border:0; border-radius:0; padding:7px 14px; white-space:nowrap; }
+  .gw-seg button + button { border-left:1px solid var(--accent); }
+  .gw-seg button[aria-pressed="true"] { background:var(--accent); color:#fff; font-weight:700; }
+  .gw-mode-note { color:var(--muted); font-size:.85em; }
+  .gw-stage { border:1px solid var(--line); border-radius:10px; background:var(--stage); overflow:hidden; }
+  .gw-svg { display:block; width:100%; height:auto; touch-action:none; user-select:none; -webkit-user-select:none; cursor:ns-resize; outline:none; }
+  .gw-svg:focus-visible { box-shadow:inset 0 0 0 3px var(--accent); }
+  .gw-zoombox { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-start; margin-top:8px; padding:8px; border:1px solid var(--line); border-radius:10px; background:var(--stage2); }
+  .gw-zsvg { display:block; flex:0 1 440px; width:100%; max-width:440px; height:auto; touch-action:none; user-select:none; -webkit-user-select:none; cursor:ns-resize; border:1px solid var(--line); border-radius:8px; outline:none; }
+  .gw-zsvg:focus-visible { box-shadow:0 0 0 3px var(--accent); }
+  .gw-zcap { flex:1 1 220px; font-size:.9em; color:var(--muted); }
+  .gw-zcap b { color:var(--fg); }
+  .gw-zcap p { margin:0 0 6px; }
+  .gw-bar { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; align-items:center; }
+  button { font:inherit; padding:8px 14px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--fg); cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .gw-answer { display:none; padding:12px; border:1px solid var(--ok); border-radius:8px; background:var(--panel); }
+  .gw-answer.open { display:block; }
+  .gw-value { font-size:1.6em; font-weight:700; color:var(--ok); }
+  .gw-hint { margin-top:6px; color:var(--warn); font-size:.95em; }
+  /* 휴대폰 세로 화면: 확대 창이 주 읽기 화면, 메인 그림은 보조(위쪽 개요) */
+  @media (max-width: 640px) {
+    body { padding:10px; font-size:15px; }
+    .gw-wrap h2 { font-size:1.08em; }
+    .gw-help { font-size:.82em; }
+    .gw-mode { padding:6px 8px; gap:6px; }
+    .gw-mode-lab { width:100%; }
+    .gw-seg { width:100%; }
+    .gw-seg button { flex:1 1 50%; padding:8px 6px; font-size:.92em; }
+    .gw-mode-note { display:none; }
+    .gw-zoombox { padding:6px; gap:6px; }
+    .gw-zsvg { flex:1 1 100%; max-width:none; }
+    .gw-zcap { font-size:.82em; }
+    .gw-bar button { flex:1 1 40%; }
+  }
+</style>
+</head>
+<body>
+<div id="gw-root"></div>
+<script>
+(function () {
+  const ID = 'outside-mic';
+  const TITLE = '외측마이크로미터';
+
+  // <calc> ---- 정수 연산만 사용 ----
+  // 상태 q = 심블 앞단 위치, 단위 1/1000 mm(정수), 0~25000.
+  // 일반 모드(0.01mm)에서는 q가 항상 10의 배수, 버니어 모드(0.001mm)에서는 1 단위.
+  const Q_MIN = 0, Q_MAX = 25000;
+  const MODE_INFO = {
+    normal:  { step: 10, res: '0.01mm',  label: '일반 0.01mm' },
+    vernier: { step: 1,  res: '0.001mm', label: '버니어 0.001mm' }
+  };
+  let mode = 'normal';                      // 기본: 일반 모드
+
+  function stepOf(m) { return m === 'vernier' ? 1 : 10; }
+  function snapQ(v, m) {
+    const s = stepOf(m || mode);
+    const c = Math.max(Q_MIN, Math.min(Q_MAX, Math.round(v)));
+    return Math.round(c / s) * s;           // Q_MAX(25000)는 10의 배수라 범위를 넘지 않음
+  }
+
+  function readParts(q) {
+    const sleeveMm = Math.floor(q / 1000);            // 노출된 마지막 1mm 눈금
+    const half = Math.floor(q / 500) % 2;             // 0.5mm 눈금 노출 여부
+    const thimble = Math.floor((q % 500) / 10);       // 기선을 지난 심블 눈금(0~49)
+    const vernier = q % 10;                           // 일치하는 부척 선 번호(0~9, 0은 10과 동시 일치)
+    return { q: q, sleeveMm: sleeveMm, half: half, thimble: thimble, vernier: vernier,
+             check: (sleeveMm * 1000 + half * 500 + thimble * 10 + vernier) === q };
+  }
+
+  function formatQ(q, m) {                  // 문자열 변환만 사용 (부동소수점 나눗셈 없음)
+    const ip = Math.floor(q / 1000), fp = q % 1000;
+    if (m === 'vernier') return ip + '.' + String(fp).padStart(3, '0');
+    return ip + '.' + String(Math.floor(fp / 10)).padStart(2, '0');
+  }
+
+  function answer(q, m) {
+    m = (m === 'vernier' || m === 'normal') ? m : mode;
+    if (m === 'normal' && q % 10 !== 0) q = snapQ(q, 'normal');
+    const r = readParts(q);
+    const value = formatQ(q, m);
+    const H = r.half ? '0.5' : '0';
+    let text = '슬리브 ' + r.sleeveMm + 'mm + ' + H + 'mm + 심블 ' + r.thimble + '×0.01mm';
+    if (m === 'vernier') text += ' + 버니어 ' + r.vernier + '×0.001mm';
+    text += ' = ' + value + 'mm';
+    return {
+      q: q, mode: m, um: q, parts: r, value: value, display: value + ' mm', text: text,
+      A: r.sleeveMm, half: r.half, n: r.thimble, k: r.vernier,
+      nearHalf: (r.thimble >= 45 || r.thimble <= 5),
+      vernierZero: (m === 'vernier' && r.vernier === 0),
+      check: r.check
+    };
+  }
+
+  const BOUNDARY_POOLS = (function () {
+    const normal = [], vernier = [];
+    const nSet = { 0: 1, 1: 1, 2: 1, 47: 1, 48: 1, 49: 1 };                 // 심블 눈금(0.01mm) 기준
+    const vSet = { 0: 1, 1: 1, 2: 1, 9: 1, 10: 1, 490: 1, 491: 1, 495: 1, 498: 1, 499: 1 }; // q mod 500 기준
+    for (let q = Q_MIN; q <= Q_MAX; q++) {
+      if (q % 10 === 0 && nSet[(q / 10) % 50]) normal.push(q);
+      if (vSet[q % 500]) vernier.push(q);
+    }
+    return { normal: normal, vernier: vernier };
+  })();
+
+  function randomQ(prev, m, rnd) {
+    rnd = rnd || Math.random;
+    m = m || mode;
+    const s = stepOf(m), pool = BOUNDARY_POOLS[m];
+    let q;
+    do {
+      if (rnd() < 0.4) q = pool[Math.floor(rnd() * pool.length)];
+      else q = Q_MIN + s * Math.floor(rnd() * ((Q_MAX - Q_MIN) / s + 1));
+    } while (q === prev);
+    return q;
+  }
+  // </calc>
+
+  // ---- 메인 그림 기하 (viewBox 단위) ----
+  const NS = 'http://www.w3.org/2000/svg';
+  const VB_W = 1200;
+  const BY = 190;            // 슬리브 기선 y
+  const X0 = 404;            // 슬리브 0mm 눈금 x
+  const S = 24;              // 1mm 당 길이
+  const SL_H = 62;           // 슬리브 반높이
+  const TH_H = 76;           // 심블 반높이
+  const R = 66;              // 눈금 투영 반지름 (심블 눈금선과 부척 선이 같은 투영을 쓴다)
+  const BEV = 10, TH_W = 134;
+  const ANVIL_X = 140, GAP_S = 6;   // 앤빌 측정면 x, 측정 간격 표시 배율(1mm = 6, 축소 표시)
+  const BOSS_R = 300, SLV_X = 372;
+  const U10 = 0.72 * Math.PI / 180;  // 심블 1/10 눈금(= 버니어 1칸 차이)의 각도
+  const FULL_VB = [40, 92, 1160, 316];
+
+  // ---- 확대 창 기하 (펼친 그림, 선형) ----
+  const ZW = 400;            // 확대 창 폭
+  const ZEX = 250;           // 확대 창의 심블 앞단 x (고정, 슬리브가 미끄러져 지나감)
+  const ZS = 70;             // 확대 창 1mm 당 길이
+  const ZU = 3.6;            // 심블 1/10 눈금 = 3.6 (심블 1눈금 36, 부척 1칸 32.4)
+  const ZGEO = { normal: { H: 360, Y0: 190 }, vernier: { H: 470, Y0: 400 } };
+  const ZLAB = 28;           // 버니어 번호 칸 폭
+
+  // 같은 정수 인자(1/10 눈금 단위)를 같은 식에 넣으므로 일치선은 부동소수점까지 정확히 같은 y가 된다.
+  function yMain(u10) { return BY - R * Math.sin(u10 * U10); }
+  function yZoom(u10) { return ZGEO[mode].Y0 - ZU * u10; }
+
+  let q = 0, drawn = false;
+  let root, svg, zsvg, ans, dyn, zdyn, titleEl, btnN, btnV, zcapV;
+
+  function el(tag, attrs, parent) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function grad(defs, id, stops, x2, y2) {
+    const g = el('linearGradient', { id: ID + '-' + id, x1: 0, y1: 0, x2: x2 === undefined ? 0 : x2, y2: y2 === undefined ? 1 : y2 }, defs);
+    stops.forEach(function (s) { el('stop', { offset: s[0], 'stop-color': s[1] }, g); });
+    return 'url(#' + ID + '-' + id + ')';
+  }
+  const FONT = 'system-ui, "Malgun Gothic", sans-serif';
+
+  function mount(container) {
+    root = container;
+    container.innerHTML =
+      '<div class="gw-wrap">' +
+      '<h2 id="' + ID + '-title"></h2>' +
+      '<div class="gw-mode" role="group" aria-label="읽기 모드">' +
+        '<span class="gw-mode-lab">읽기 모드</span>' +
+        '<span class="gw-seg">' +
+          '<button id="' + ID + '-m-normal" aria-pressed="true">일반 (0.01mm)</button>' +
+          '<button id="' + ID + '-m-vernier" aria-pressed="false">버니어 (0.001mm)</button>' +
+        '</span>' +
+        '<span class="gw-mode-note">버니어: 슬리브 부척 10칸 = 심블 9칸</span>' +
+      '</div>' +
+      '<p class="gw-help">그림이나 확대 창에서 심블을 <b>위/아래로</b> 끌면 한 눈금씩, <b>좌우로</b> 끌면 빠르게 움직입니다(마우스·터치). 휠·키보드 ↑/↓(Shift: 0.5mm)도 됩니다. 읽은 뒤 <b>정답확인</b>을 누르세요.</p>' +
+      '<div class="gw-stage">' +
+        '<svg class="gw-svg" id="' + ID + '-svg" tabindex="0" role="application" aria-label="외측마이크로미터 전체 그림: 위/아래 화살표로 심블 돌리기 (Shift: 0.5mm)"></svg>' +
+      '</div>' +
+      '<div class="gw-zoombox">' +
+        '<svg class="gw-zsvg" id="' + ID + '-zsvg" tabindex="0" role="application" aria-label="확대 창: 위/아래로 끌어 심블 돌리기"></svg>' +
+        '<div class="gw-zcap"><p><b>확대 창</b> (전체 그림의 점선 영역을 펼쳐서 크게 그림) — 여기서 끌어도 심블이 움직입니다.</p>' +
+          '<p>① 심블 앞단 왼쪽에 보이는 마지막 슬리브 눈금(위: 1mm, 아래: 0.5mm) → ② 기선을 지난 심블 눈금 × 0.01mm</p>' +
+          '<p id="' + ID + '-zcapv">③ 심블 눈금선과 <b>한 줄로 이어지는</b> 슬리브 부척 선 번호 × 0.001mm (부척 10칸 = 심블 9칸). 0과 10이 함께 맞으면 0.</p></div>' +
+      '</div>' +
+      '<div class="gw-bar">' +
+        '<button class="primary" id="' + ID + '-reveal">정답확인</button>' +
+        '<button id="' + ID + '-new">새 문제</button>' +
+      '</div>' +
+      '<div class="gw-answer" id="' + ID + '-ans" aria-live="polite"></div>' +
+      '</div>';
+    svg = container.querySelector('#' + ID + '-svg');
+    zsvg = container.querySelector('#' + ID + '-zsvg');
+    ans = container.querySelector('#' + ID + '-ans');
+    titleEl = container.querySelector('#' + ID + '-title');
+    btnN = container.querySelector('#' + ID + '-m-normal');
+    btnV = container.querySelector('#' + ID + '-m-vernier');
+    zcapV = container.querySelector('#' + ID + '-zcapv');
+    container.querySelector('#' + ID + '-reveal').onclick = reveal;
+    container.querySelector('#' + ID + '-new').onclick = newProblem;
+    btnN.onclick = function () { setMode('normal'); };
+    btnV.onclick = function () { setMode('vernier'); };
+    buildStatic();
+    buildZoomStatic();
+    bindInput(svg, S);
+    bindInput(zsvg, ZS);
+    updateModeUI();
+    newProblem();
+  }
+
+  // ---- 고정 그림: U자 프레임, 단열 패드, 앤빌, 클램프, 슬리브 ----
+  function buildStatic() {
+    svg.innerHTML = '';
+    svg.setAttribute('viewBox', FULL_VB.join(' '));
+    const defs = el('defs', {}, svg);
+    svg._g = {
+      cyl: grad(defs, 'cyl', [['0', '#7f8a95'], ['0.18', '#c9d0d7'], ['0.42', '#fbfcfd'], ['0.6', '#e3e8ec'], ['0.85', '#a5aeb7'], ['1', '#6c7680']]),
+      thm: grad(defs, 'thm', [['0', '#8b959f'], ['0.2', '#d3d9df'], ['0.45', '#f7f9fa'], ['0.62', '#e6eaee'], ['0.88', '#aab3bb'], ['1', '#78838d']]),
+      slv: grad(defs, 'slv', [['0', '#a9b2ba'], ['0.15', '#dce1e6'], ['0.5', '#f2f4f6'], ['0.85', '#d4dae0'], ['1', '#9aa4ad']]),
+      grip: grad(defs, 'grip', [['0', '#5b656f'], ['0.3', '#a7b0b9'], ['0.5', '#c9d0d6'], ['0.75', '#8e98a2'], ['1', '#4d5660']]),
+      frame: grad(defs, 'frame', [['0', '#9aa5b0'], ['0.35', '#6d7884'], ['1', '#3b444d']], 0.35, 1),
+      pad: grad(defs, 'pad', [['0', '#3a3f46'], ['0.5', '#24282d'], ['1', '#17191c']], 0, 1),
+      carb: grad(defs, 'carb', [['0', '#4b525a'], ['0.5', '#8d959d'], ['1', '#3f454c']])
+    };
+    const pk = el('pattern', { id: ID + '-knurl', width: 6, height: 6, patternUnits: 'userSpaceOnUse' }, defs);
+    el('path', { d: 'M0 0 L6 6 M6 0 L0 6', stroke: '#3b434b', 'stroke-width': 0.8, 'stroke-opacity': 0.55 }, pk);
+    const pr = el('pattern', { id: ID + '-rib', width: 5, height: 10, patternUnits: 'userSpaceOnUse' }, defs);
+    el('rect', { x: 0, y: 0, width: 1.6, height: 10, fill: '#2f363d', 'fill-opacity': 0.45 }, pr);
+    const blur = el('filter', { id: ID + '-blur', x: '-20%', y: '-50%', width: '140%', height: '200%' }, defs);
+    el('feGaussianBlur', { stdDeviation: 7 }, blur);
+
+    el('rect', { x: 0, y: 0, width: VB_W, height: 500, style: 'fill:var(--stage)' }, svg);
+    el('ellipse', { cx: 600, cy: BY + 206, rx: 560, ry: 10, fill: '#000', 'fill-opacity': 0.22, filter: 'url(#' + ID + '-blur)' }, svg);
+
+    svg._spindle = el('g', {}, svg);
+
+    const Y = function (d) { return BY + d; };
+    el('path', { d:
+      'M64 ' + Y(-36) + ' Q64 ' + Y(-44) + ' 72 ' + Y(-44) + ' L118 ' + Y(-44) + ' Q126 ' + Y(-44) + ' 126 ' + Y(-36) +
+      ' L126 ' + Y(40) + ' Q126 ' + Y(120) + ' 200 ' + Y(128) + ' L230 ' + Y(128) + ' Q294 ' + Y(120) + ' 300 ' + Y(50) +
+      ' L300 ' + Y(-50) + ' Q300 ' + Y(-58) + ' 308 ' + Y(-58) + ' L364 ' + Y(-58) + ' Q372 ' + Y(-58) + ' 372 ' + Y(-50) +
+      ' L372 ' + Y(60) + ' Q372 ' + Y(200) + ' 220 ' + Y(200) + ' L196 ' + Y(200) + ' Q64 ' + Y(200) + ' 64 ' + Y(60) + ' Z',
+      fill: svg._g.frame, stroke: '#262c33', 'stroke-width': 1.5 }, svg);
+    el('path', { d: 'M70 ' + Y(-38) + ' L120 ' + Y(-38) + ' M306 ' + Y(-52) + ' L366 ' + Y(-52), stroke: '#ffffff', 'stroke-opacity': 0.35, 'stroke-width': 2, fill: 'none' }, svg);
+    el('path', { d:
+      'M76 ' + Y(50) + ' Q76 ' + Y(188) + ' 198 ' + Y(188) + ' L218 ' + Y(188) + ' Q360 ' + Y(188) + ' 360 ' + Y(56) +
+      ' L312 ' + Y(60) + ' Q306 ' + Y(138) + ' 232 ' + Y(140) + ' L196 ' + Y(140) + ' Q116 ' + Y(134) + ' 114 ' + Y(52) + ' Z',
+      fill: svg._g.pad, stroke: '#121417', 'stroke-width': 1.2 }, svg);
+    el('path', { d: 'M86 ' + Y(70) + ' Q90 ' + Y(176) + ' 198 ' + Y(178), stroke: '#ffffff', 'stroke-opacity': 0.12, 'stroke-width': 3, fill: 'none' }, svg);
+    svg._frameTxt = el('text', { x: 218, y: Y(168), 'text-anchor': 'middle', 'font-size': 12, 'font-weight': 600, fill: '#d8dde3', 'font-family': FONT, 'letter-spacing': 0.5 }, svg);
+    const t2 = el('text', { x: 218, y: Y(154), 'text-anchor': 'middle', 'font-size': 10, fill: '#9aa3ab', 'font-family': FONT }, svg);
+    t2.textContent = 'OUTSIDE MICROMETER';
+
+    el('rect', { x: 124, y: BY - 13, width: ANVIL_X - 124, height: 26, fill: svg._g.cyl, stroke: '#5e6872' }, svg);
+    el('rect', { x: ANVIL_X - 4, y: BY - 13, width: 4, height: 26, fill: svg._g.carb }, svg);
+
+    el('rect', { x: 318, y: BY - 70, width: 36, height: 13, rx: 3, fill: svg._g.cyl, stroke: '#5e6872' }, svg);
+    el('line', { x1: 336, y1: BY - 66, x2: 298, y2: BY - 86, stroke: '#2b3037', 'stroke-width': 9, 'stroke-linecap': 'round' }, svg);
+    el('line', { x1: 334, y1: BY - 68, x2: 300, y2: BY - 86, stroke: '#ffffff', 'stroke-opacity': 0.25, 'stroke-width': 2, 'stroke-linecap': 'round' }, svg);
+    el('circle', { cx: 336, cy: BY - 64, r: 5, fill: svg._g.carb, stroke: '#2b3037' }, svg);
+
+    const cp = el('clipPath', { id: ID + '-slvclip' }, defs);
+    svg._clipRect = el('rect', { x: 0, y: 0, width: X0, height: 500 }, cp);
+    const slv = el('g', { 'clip-path': 'url(#' + ID + '-slvclip)' }, svg);
+    const slvEnd = X0 + 25 * S + 30;
+    el('rect', { x: SLV_X, y: BY - SL_H, width: slvEnd - SLV_X, height: 2 * SL_H, fill: svg._g.slv, stroke: '#7d8790' }, slv);
+    el('rect', { x: SLV_X - 4, y: BY - SL_H - 4, width: 12, height: 2 * SL_H + 8, rx: 2, fill: svg._g.cyl, stroke: '#5e6872' }, slv);
+    el('line', { x1: SLV_X + 8, y1: BY, x2: slvEnd, y2: BY, stroke: '#1f2328', 'stroke-width': 1.5 }, slv);
+    svg._vern = el('g', {}, slv);
+
+    dyn = el('g', {}, svg);
+    svg._ticks = el('g', {}, svg);
+    svg._slvNums = el('g', {}, svg);
+    svg._zoneRect = el('rect', { x: 0, y: BY - 72, width: 10, height: 144, rx: 4, fill: 'none', stroke: '#0969da', 'stroke-width': 2, 'stroke-dasharray': '6 4' }, svg);
+  }
+
+  function drawVernierMain() {
+    const g = svg._vern; g.innerHTML = '';
+    if (mode !== 'vernier') return;
+    for (let j = 1; j <= 10; j++) {
+      const y = yMain(9 * j);
+      el('line', { class: 'vn-line', 'data-j': j, x1: SLV_X + 8, y1: y, x2: X0 + 25 * S + 30, y2: y, stroke: '#1d3550', 'stroke-width': 1.1 }, g);
+    }
+    for (let j = 0; j <= 10; j += 5) {        // 투영으로 위쪽 간격이 좁아 0·5·10만 표기(전체 번호는 확대 창)
+      const t = el('text', { x: SLV_X + 10, y: yMain(9 * j) + 2.7, 'font-size': 7.5, 'font-weight': 700, fill: '#1d3550', 'font-family': FONT }, g);
+      t.textContent = j;
+    }
+  }
+
+  // 슬리브 눈금 노출 규칙(정수 비교): 눈금 위치 t(1/1000mm)가 t <= q 일 때만 보인다.
+  function drawSleeveTicks() {
+    const tg = svg._ticks, ng = svg._slvNums;
+    tg.innerHTML = ''; ng.innerHTML = '';
+    const edge = X0 + (q / 1000) * S;
+    for (let k = 0; k <= 25; k++) {
+      if (k * 1000 <= q) {
+        const x = X0 + k * S;
+        const major = k % 5 === 0;
+        el('line', { class: 'sl-tick', 'data-t': k * 1000, x1: x, y1: BY, x2: x, y2: BY - (major ? 18 : 11), stroke: '#111418', 'stroke-width': 1.5 }, tg);
+        if (major) {
+          const near = edge - x < 10;
+          const t = el('text', { x: near ? x - 2 : x, y: BY - 23, 'text-anchor': near ? 'end' : 'middle', 'font-size': 13, 'font-weight': 700, fill: '#111418',
+            stroke: '#eef1f4', 'stroke-width': 3, 'paint-order': 'stroke', 'font-family': FONT }, ng);
+          t.textContent = k;
+        }
+      }
+      if (k < 25 && k * 1000 + 500 <= q) {
+        const xh = X0 + (k + 0.5) * S;
+        el('line', { class: 'sl-tick', 'data-t': k * 1000 + 500, x1: xh, y1: BY, x2: xh, y2: BY + 11, stroke: '#111418', 'stroke-width': 1.5 }, tg);
+      }
+    }
+  }
+
+  // ---- 상태 q만으로 움직이는 부분을 다시 그린다 ----
+  function draw() {
+    const edge = X0 + (q / 1000) * S;
+    const xe = edge;
+    svg._clipRect.setAttribute('width', edge);
+    drawVernierMain();
+    drawSleeveTicks();
+
+    const sp = svg._spindle; sp.innerHTML = '';
+    const face = ANVIL_X + (q / 1000) * GAP_S;
+    el('rect', { x: face, y: BY - 13, width: BOSS_R + 6 - face, height: 26, fill: svg._g.cyl, stroke: '#5e6872' }, sp);
+    el('rect', { x: face, y: BY - 13, width: 4, height: 26, fill: svg._g.carb }, sp);
+
+    dyn.innerHTML = '';
+    const G = svg._g;
+    el('path', { d: 'M' + xe + ' ' + (BY - 64) + ' L' + (xe + BEV) + ' ' + (BY - TH_H) + ' L' + (xe + BEV) + ' ' + (BY + TH_H) + ' L' + xe + ' ' + (BY + 64) + ' Z',
+      fill: G.thm, stroke: '#59636d', 'stroke-width': 1 }, dyn);
+    el('rect', { x: xe + BEV, y: BY - TH_H, width: 84 - BEV, height: 2 * TH_H, fill: G.thm, stroke: '#59636d', 'stroke-width': 1 }, dyn);
+    el('rect', { x: xe + 84, y: BY - TH_H - 3, width: TH_W - 84, height: 2 * TH_H + 6, rx: 3, fill: G.grip, stroke: '#3f4851' }, dyn);
+    el('rect', { x: xe + 86, y: BY - TH_H - 1, width: TH_W - 88, height: 2 * TH_H + 2, fill: 'url(#' + ID + '-knurl)' }, dyn);
+    el('rect', { x: xe + TH_W, y: BY - 26, width: 10, height: 52, fill: G.cyl, stroke: '#5e6872' }, dyn);
+    el('rect', { x: xe + TH_W + 10, y: BY - 38, width: 34, height: 76, rx: 5, fill: G.cyl, stroke: '#5e6872' }, dyn);
+    el('rect', { x: xe + TH_W + 12, y: BY - 37, width: 30, height: 74, fill: 'url(#' + ID + '-rib)' }, dyn);
+    el('rect', { x: xe + TH_W + 42, y: BY - 30, width: 10, height: 60, rx: 4, fill: G.cyl, stroke: '#5e6872' }, dyn);
+    el('line', { x1: xe, y1: BY - 64, x2: xe, y2: BY + 64, stroke: '#4b5560', 'stroke-width': 1.2 }, dyn);
+
+    // 심블 눈금: 값 v의 눈금은 (10v - r)×0.72° 위치 (r = q mod 500). 큰 값이 기선 위쪽.
+    const r = q % 500, n = Math.floor(r / 10);
+    for (let d = -13; d <= 14; d++) {
+      const v = n + d;
+      const u10 = 10 * v - r;
+      if (Math.abs(u10 * 0.72) >= 84) continue;
+      const vv = ((v % 50) + 50) % 50;
+      const y = yMain(u10);
+      const c = Math.cos(u10 * U10);
+      const major = vv % 5 === 0;
+      const op = (0.35 + 0.65 * c).toFixed(3);
+      el('line', { class: 'th-line', 'data-v': vv, 'data-u10': u10, x1: xe, y1: y, x2: xe + (major ? 22 : 13), y2: y, stroke: '#111418', 'stroke-width': 1.2, 'stroke-opacity': op }, dyn);
+      if (major) {
+        const t = el('text', { transform: 'translate(' + (xe + 26) + ',' + y + ') scale(1,' + c.toFixed(3) + ')', y: 4.5, 'font-size': 13, 'font-weight': 700, fill: '#111418', 'fill-opacity': op, 'font-family': FONT }, dyn);
+        t.textContent = vv;
+      }
+    }
+
+    // 확대 창이 보여 주는 영역(점선)
+    const zl = (ZEX / ZS) * S, zr = ((ZW - ZEX) / ZS) * S;
+    svg._zoneRect.setAttribute('x', (edge - zl).toFixed(2));
+    svg._zoneRect.setAttribute('width', (zl + zr).toFixed(2));
+    drawZoom();
+  }
+
+  // ---- 확대 창: 기선 부근을 펼쳐 그림 (슬리브 1mm = 70, 심블 1눈금 = 36, 부척 1칸 = 32.4) ----
+  function buildZoomStatic() {
+    zsvg.innerHTML = '';
+    const defs = el('defs', {}, zsvg);
+    zsvg._gs = grad(defs, 'zslv', [['0', '#e2e7eb'], ['1', '#f4f6f8']], 1, 0);
+    zsvg._gt = grad(defs, 'zthm', [['0', '#b9c1c9'], ['0.1', '#eef1f4'], ['0.7', '#e2e7eb'], ['1', '#c7ced5']], 1, 0);
+    zdyn = el('g', {}, zsvg);
+  }
+
+  function drawZoom() {
+    if (!zdyn) return;
+    const geo = ZGEO[mode], H = geo.H, Y0 = geo.Y0;
+    zsvg.setAttribute('viewBox', '0 0 ' + ZW + ' ' + H);
+    const g = zdyn; g.innerHTML = '';
+    // 바탕: 슬리브(왼쪽) / 심블(오른쪽)
+    el('rect', { x: 0, y: 0, width: ZEX, height: H, fill: zsvg._gs }, g);
+    el('line', { x1: 0, y1: Y0, x2: ZEX, y2: Y0, stroke: '#111418', 'stroke-width': 2 }, g);   // 기선
+
+    // 버니어 부척 선(기선 = 0번)
+    if (mode === 'vernier') {
+      for (let j = 1; j <= 10; j++) {
+        const y = yZoom(9 * j);
+        el('line', { class: 'vn-line', 'data-j': j, x1: ZLAB, y1: y, x2: ZEX, y2: y, stroke: '#1d3550', 'stroke-width': 1.4 }, g);
+      }
+    }
+
+    // 슬리브 눈금: 노출된 것(t <= q)만, 앞단에서 거리 (q - t) 만큼 왼쪽
+    const ticks = el('g', {}, g), nums = el('g', {}, g);
+    const tFirst = Math.max(0, Math.floor((q - (ZEX + 10) * 1000 / ZS) / 500) * 500);
+    for (let t = tFirst; t <= q; t += 500) {
+      const x = ZEX - (q - t) * ZS / 1000;
+      if (x < -4) continue;
+      const isMm = t % 1000 === 0;
+      const mm = t / 1000;
+      if (isMm) {
+        const major = mm % 5 === 0;
+        el('line', { class: 'sl-tick', 'data-t': t, x1: x, y1: Y0, x2: x, y2: Y0 - (major ? 44 : 34), stroke: '#111418', 'stroke-width': 2.4 }, ticks);
+        const near = ZEX - x < 14;
+        const tx = el('text', { x: near ? x - 3 : x, y: Y0 - (major ? 50 : 42), 'text-anchor': near ? 'end' : 'middle', 'font-size': major ? 24 : 16, 'font-weight': 700,
+          fill: major ? '#111418' : '#4b5560', stroke: '#eef1f4', 'stroke-width': 5, 'paint-order': 'stroke', 'font-family': FONT }, nums);
+        tx.textContent = mm;
+      } else {
+        el('line', { class: 'sl-tick', 'data-t': t, x1: x, y1: Y0, x2: x, y2: Y0 + 30, stroke: '#111418', 'stroke-width': 2.4 }, ticks);
+      }
+    }
+    if (mode === 'vernier') {
+      el('rect', { x: 0, y: 0, width: ZLAB, height: H, fill: '#d5dbe1' }, g);
+      el('line', { x1: ZLAB, y1: 0, x2: ZLAB, y2: H, stroke: '#9aa4ad' }, g);
+      for (let j = 0; j <= 10; j++) {
+        const t = el('text', { x: ZLAB - 4, y: yZoom(9 * j) + 5, 'text-anchor': 'end', 'font-size': 14, 'font-weight': 700, fill: '#1d3550', 'font-family': FONT }, g);
+        t.textContent = j;
+      }
+    }
+
+    // 심블
+    el('rect', { x: ZEX, y: 0, width: ZW - ZEX, height: H, fill: zsvg._gt }, g);
+    const r = q % 500, n = Math.floor(r / 10);
+    const dTop = Math.ceil(Y0 / (ZU * 10)) + 1, dBot = Math.ceil((H - Y0) / (ZU * 10)) + 1;
+    for (let d = -dBot; d <= dTop; d++) {
+      const v = n + d;
+      const u10 = 10 * v - r;
+      const y = yZoom(u10);
+      if (y < -2 || y > H + 2) continue;
+      const vv = ((v % 50) + 50) % 50;
+      const major = vv % 5 === 0;
+      el('line', { class: 'th-line', 'data-v': vv, 'data-u10': u10, x1: ZEX, y1: y, x2: ZEX + (major ? 50 : 32), y2: y, stroke: '#111418', 'stroke-width': 1.6 }, g);
+      if (major) {
+        const t = el('text', { x: ZEX + 58, y: y + 8, 'font-size': 22, 'font-weight': 700, fill: '#111418', 'font-family': FONT }, g);
+        t.textContent = vv;
+      }
+    }
+    el('line', { x1: ZEX, y1: 0, x2: ZEX, y2: H, stroke: '#3b444d', 'stroke-width': 2 }, g);   // 심블 앞단
+
+    // 머리띠 (눈금 위에 덮어 글자 겹침 방지)
+    el('rect', { x: 0, y: 0, width: ZW, height: 22, fill: '#c9d1d8' }, g);
+    el('line', { x1: 0, y1: 22, x2: ZW, y2: 22, stroke: '#8c959e' }, g);
+    const h1 = el('text', { x: mode === 'vernier' ? 4 : 8, y: 16, 'font-size': 12, 'font-weight': 600, fill: '#2b3137', 'font-family': FONT }, g);
+    h1.textContent = mode === 'vernier' ? '부척 · 슬리브' : '슬리브 (기선 위 1mm / 아래 0.5mm)';
+    const h2 = el('text', { x: ZW - 8, y: 16, 'text-anchor': 'end', 'font-size': 12, 'font-weight': 600, fill: '#2b3137', 'font-family': FONT }, g);
+    h2.textContent = '심블 ×0.01mm';
+  }
+
+  function updateModeUI() {
+    const info = MODE_INFO[mode];
+    titleEl.textContent = TITLE + (mode === 'vernier' ? ' — 버니어 마이크로미터' : '') + ' (0~25mm, 최소눈금 ' + info.res + ')';
+    btnN.setAttribute('aria-pressed', mode === 'normal' ? 'true' : 'false');
+    btnV.setAttribute('aria-pressed', mode === 'vernier' ? 'true' : 'false');
+    zcapV.style.display = mode === 'vernier' ? '' : 'none';
+    svg._frameTxt.textContent = '0–25 mm   ' + info.res.replace('mm', ' mm');
+  }
+
+  function setMode(m) {
+    if (m !== 'normal' && m !== 'vernier') return;
+    closeAnswer();                           // 모드 전환 시 정답 패널은 항상 닫는다
+    if (m === mode) return;
+    mode = m;
+    q = snapQ(q, mode);                      // 일반 모드로 돌아오면 0.01mm 단위로 맞춤
+    updateModeUI();
+    draw();
+  }
+
+  // ---- 입력: 세로 드래그(한 눈금씩), 가로 드래그(빠르게: 앞단이 포인터를 따라감), 휠, 키보드 ----
+  function bindInput(target, unitsPerMm) {
+    let dragging = false, pid = null, sx = 0, sy = 0, lastY = 0, acc = 0, axis = null, q0 = 0;
+    target.addEventListener('pointerdown', function (e) {
+      if (e.button !== undefined && e.button !== 0) return;
+      dragging = true; pid = e.pointerId; sx = e.clientX; sy = e.clientY; lastY = e.clientY; acc = 0; axis = null; q0 = q;
+      try { target.setPointerCapture(pid); } catch (err) {}
+      target.focus({ preventScroll: true });
+      e.preventDefault();
+    });
+    target.addEventListener('pointermove', function (e) {
+      if (!dragging || e.pointerId !== pid) return;
+      const dx = e.clientX - sx, dy = e.clientY - sy;
+      if (!axis) {
+        if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) * 1.5) axis = 'x';
+        else if (Math.abs(dy) > 0) axis = 'y';
+      }
+      if (axis === 'x') {
+        const ctm = target.getScreenCTM();
+        const scale = ctm && ctm.a ? ctm.a : 1;
+        setState(q0 + (dx / scale) / unitsPerMm * 1000);
+      } else if (axis === 'y') {
+        const px = mode === 'vernier' ? 3 : 4;
+        acc += lastY - e.clientY;
+        lastY = e.clientY;
+        const steps = acc > 0 ? Math.floor(acc / px) : Math.ceil(acc / px);
+        if (steps !== 0) { acc -= steps * px; setState(q + steps * stepOf(mode)); }
+      }
+    });
+    function end(e) {
+      if (e.pointerId !== pid) return;
+      dragging = false;
+      try { target.releasePointerCapture(pid); } catch (err) {}
+      pid = null;
+    }
+    target.addEventListener('pointerup', end);
+    target.addEventListener('pointercancel', end);
+    target.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      if (e.deltaY === 0) return;
+      setState(q + (e.deltaY < 0 ? 1 : -1) * (e.shiftKey ? 10 : 1) * stepOf(mode));
+    }, { passive: false });
+    target.addEventListener('keydown', function (e) {
+      const s = stepOf(mode);
+      let d = 0;
+      if (e.key === 'ArrowUp') d = e.shiftKey ? 500 : s;
+      else if (e.key === 'ArrowDown') d = e.shiftKey ? -500 : -s;
+      else if (e.key === 'ArrowRight') d = 10 * s;
+      else if (e.key === 'ArrowLeft') d = -10 * s;
+      else return;
+      e.preventDefault();
+      setState(q + d);
+    });
+  }
+
+  function closeAnswer() { if (ans) { ans.classList.remove('open'); ans.innerHTML = ''; } }
+
+  function setState(v) {
+    const next = snapQ(v, mode);
+    if (next === q && drawn) return;
+    q = next;
+    closeAnswer();
+    draw();
+    drawn = true;
+  }
+
+  function reveal() {
+    if (ans.classList.contains('open')) { closeAnswer(); return; }
+    const a = answer(q, mode);
+    let hint = '';
+    if (a.nearHalf) hint += '<div class="gw-hint">0.5mm 눈금이 심블 앞단 밖으로 보이는지 먼저 확인하세요.</div>';
+    if (a.vernierZero) hint += '<div class="gw-hint">부척 0번과 10번 선이 함께 일치하면 0.001mm 자리는 0입니다.</div>';
+    ans.innerHTML = '<div class="gw-value">' + a.display + '</div><div>' + a.text + '</div>' + hint;
+    ans.classList.add('open');
+    try {
+      const r = ans.getBoundingClientRect();
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      if (r.top < 0 || r.bottom > vh) ans.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } catch (err) {}
+  }
+
+  function newProblem() {
+    q = randomQ(drawn ? q : -1, mode);
+    closeAnswer();
+    draw();
+    drawn = true;
+  }
+
+  window.GaugeWidget = {
+    id: ID, title: TITLE, mount: mount, newProblem: newProblem, reveal: reveal,
+    // answer(q[, mode]) / readParts(q): q는 1/1000mm 정수(0~25000). mode 생략 시 현재 모드.
+    answer: answer, readParts: readParts,
+    get boundaryPool() { return BOUNDARY_POOLS[mode]; },
+    boundaryPools: BOUNDARY_POOLS,
+    unit: 0.001,
+    setMode: setMode, getMode: function () { return mode; },
+    getState: function () { return q; }, setState: function (v) { setState(v); },
+    _answer: answer, _getState: function () { return q; }, _setState: function (v) { setState(v); },
+    _randomQ: randomQ, _formatQ: formatQ
+  };
+  document.addEventListener('DOMContentLoaded', function () {
+    const r = document.getElementById('gw-root');
+    if (r) mount(r);
+  });
+})();
+</script>
+</body>
+</html>
