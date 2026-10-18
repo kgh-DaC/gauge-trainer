@@ -1,13 +1,12 @@
-// 사용법: node build.js <프로젝트루트>
-// _workspace/02_widget_*.html 5종을 읽어 output/에 탭형 통합 페이지 1개를 만든다.
+// 사용법: node build.js [프로젝트루트]   (생략하면 이 스크립트 기준 레포 루트)
+// 레포 루트의 vernier.html, outside-mic.html, inside-mic.html, dial.html, height.html 5종을 읽어
+// 탭형 통합 페이지 index.html을 같은 루트에 만든다(GitHub Pages가 이 파일을 연다).
 // 위젯끼리 CSS·전역 이름이 충돌하지 않도록 탭마다 iframe(srcdoc)으로 격리한다.
 const fs = require('fs');
 const path = require('path');
 
-const root = process.argv[2] || process.cwd();
-const ws = path.join(root, '_workspace');
-const out = path.join(root, 'output');
-fs.mkdirSync(out, { recursive: true });
+const root = process.argv[2] || path.resolve(__dirname, '..', '..', '..', '..');
+const OUT_FILE = 'index.html';
 
 const TABS = [
   { id: 'vernier', label: '버니어캘리퍼스' },
@@ -19,9 +18,9 @@ const TABS = [
 
 const widgets = {};
 for (const t of TABS) {
-  const src = path.join(ws, `02_widget_${t.id}.html`);
+  const src = path.join(root, `${t.id}.html`);
   if (!fs.existsSync(src)) { console.warn(`누락: ${src} (탭에서 제외)`); continue; }
-  const html = fs.readFileSync(src, 'utf8');
+  const html = fs.readFileSync(src, 'utf8').replace(/\r\n/g, '\n');   // Windows 체크아웃의 CRLF를 LF로 통일
   widgets[t.id] = html;
 }
 const tabs = TABS.filter((t) => widgets[t.id]);
@@ -90,5 +89,5 @@ const page = `<!doctype html>
 </body>
 </html>
 `;
-fs.writeFileSync(path.join(out, 'gauge-trainer.html'), page);
-console.log(`완료: output/gauge-trainer.html (${tabs.length}개 탭)`);
+fs.writeFileSync(path.join(root, OUT_FILE), page);
+console.log(`완료: ${OUT_FILE} (${tabs.length}개 탭)`);

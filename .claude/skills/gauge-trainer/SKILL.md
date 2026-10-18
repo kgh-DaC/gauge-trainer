@@ -25,7 +25,7 @@ description: 정밀측정 수업용 눈금읽기 연습 도구(버니어캘리�
 위젯별로 병렬 호출(모든 도구를 쓸 수 있는 유형). FAIL이면 보고서를 `gauge-ui-builder`에 돌려주고 해당 위젯만 재작업 → 재QA. 최대 2회 반복 후에도 FAIL이면 사용자에게 현황 보고.
 
 ## 4단계: 통합
-`_workspace/02_widget_*.html`을 합쳐 탭형 단일 페이지 `output/gauge-trainer.html`을 만든다. 각 위젯의 `GaugeWidget` 인터페이스를 이용한다(IIFE라서 충돌이 없다). 탭은 5개, 첫 화면은 버니어캘리퍼스. 통합 후 탭 전환 시 정답 패널이 닫히는지 확인한다. 개별 위젯 파일은 `output/`에 따로 내보내지 않고 통합본 1개만 둔다.
+레포 루트의 위젯 5개(`vernier.html` `outside-mic.html` `inside-mic.html` `dial.html` `height.html`)를 합쳐 탭형 단일 페이지 `index.html`을 만든다. `node .claude/skills/gauge-trainer/scripts/build.js`를 레포 루트에서 실행하면 된다(2~3단계 결과 `_workspace/02_widget_{id}.html`은 루트의 `{id}.html`로 복사해 반영한다). 각 위젯의 `GaugeWidget` 인터페이스를 이용한다(IIFE라서 충돌이 없다). 탭은 5개, 첫 화면은 버니어캘리퍼스. 통합 후 탭 전환 시 정답 패널이 닫히는지 확인한다. 위젯 개별 파일과 통합본 `index.html`을 둘 다 레포 루트에 둔다(GitHub Pages가 `index.html`을 연다).
 
 ## 5단계: 노션 연결
 노션 페이지에는 `/embed`(또는 `/임베드`)로 URL을 붙여넣어야 하므로 HTML이 공개 URL에 있어야 한다. 제안 순서:
@@ -38,5 +38,5 @@ description: 정밀측정 수업용 눈금읽기 연습 도구(버니어캘리�
 - 명세 충돌(수업 방식 불명) → 추측 금지, 사용자에게 질문.
 
 ## 테스트 시나리오
-- 정상: "버니어캘리퍼스만 먼저 만들어줘" → vernier 1~3단계 → `output/gauge-trainer.html`(버니어 탭) → 23.35mm 샘플에서 설명문 "본척 23mm + 부척 7번째 선 × 0.05 = 23.35mm" 확인.
+- 정상: "버니어캘리퍼스만 먼저 만들어줘" → vernier 1~3단계 → `index.html`(버니어 탭) → 23.35mm 샘플에서 설명문 "본척 23mm + 부척 7번째 선 × 0.05 = 23.35mm" 확인.
 - 오류: 다이얼게이지 QA에서 바늘이 99→100 경계에서 작은 바늘 오독 → FAIL 보고 → 해당 위젯만 재작업 후 재QA.

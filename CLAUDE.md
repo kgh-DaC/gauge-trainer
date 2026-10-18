@@ -11,4 +11,4 @@
 | 2026-10-15 | 참조사진 기반 외형 개선, 학교 로고·문구 삽입, 버니어 확대 x1 고정, 하이트게이지 돋보기 제거, 외측 슬리브 눈금 아래쪽만, 내측 딤블/슬리브 비율 수정 | 전체 위젯 | 사용자 피드백 |
 | 2026-10-18 | 하이트게이지에 고배율 확대창 추가(슬라이더는 고정, 보는 위치만 드래그/휠/키보드로 이동) | height 위젯 | 사용자 피드백: 일치선 찾기 어려움 |
 
-**작업 위치 (2026-10-18~):** 이 폴더가 깃허브 레포(`kgh-DaC/gauge-trainer`)이며 작업 기준이다. 위젯 원본은 루트의 `vernier.html` `outside-mic.html` `inside-mic.html` `dial.html` `height.html`(= 예전 `_workspace/02_widget_*.html`)이고, `index.html`은 이 5개를 탭으로 묶은 통합본이다. `build.js`는 `_workspace/02_widget_*.html`을 읽으므로, 사용하려면 루트 파일을 그 이름으로 복사해 임시 루트에서 실행하거나 경로를 고친다. 푸시하면 GitHub Pages(https://kgh-dac.github.io/gauge-trainer/)에 반영된다.
+**작업 위치 (2026-10-18~):** 이 폴더가 깃허브 레포(`kgh-DaC/gauge-trainer`)이며 작업 기준이다. 위젯 원본은 루트의 `vernier.html` `outside-mic.html` `inside-mic.html` `dial.html` `height.html`(= 예전 `_workspace/02_widget_*.html`)이고, `index.html`은 이 5개를 탭으로 묶은 통합본이다. 통합본은 `node .claude/skills/gauge-trainer/scripts/build.js`(레포 루트에서 실행)로 루트의 위젯 5개를 읽어 `index.html`을 다시 만든다. 푸시하면 GitHub Pages(https://kgh-dac.github.io/gauge-trainer/)에 반영된다.
