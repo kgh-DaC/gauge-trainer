@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>계측기 눈금읽기</title>
+<style>
+  :root { --bg:#fff; --fg:#1f2328; --muted:#656d76; --line:#d0d7de; --accent:#0969da; --ok:#1a7f37; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --line:#30363d; --accent:#4493f8; --ok:#3fb950; } }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, "Malgun Gothic", sans-serif; }
+  .gw-svg { width:100%; height:auto; touch-action:none; user-select:none; }
+  .gw-bar { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; }
+  button { font:inherit; padding:8px 14px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--fg); cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .gw-answer { display:none; padding:12px; border:1px solid var(--ok); border-radius:8px; }
+  .gw-answer.open { display:block; }
+  .gw-value { font-size:1.6em; font-weight:700; color:var(--ok); }
+</style>
+</head>
+<body>
+<div id="gw-root"></div>
+<script>
+(function () {
+  const ID = 'REPLACE_ID';           // 예: 'vernier'
+  const TITLE = 'REPLACE_TITLE';     // 예: '버니어캘리퍼스'
+
+  // ---- 상태: 정수 단위 하나 (명세의 상태변수) ----
+  let state = 0, STATE_MIN = 0, STATE_MAX = 0, STEP = 1;
+
+  // ---- 명세 함수: 상태 → 정답 ----
+  function answer(s) { return { valueMm: s / 100, text: '' }; }  // TODO 명세 계산식
+  function randomState() { return STATE_MIN + STEP * Math.floor(Math.random() * ((STATE_MAX - STATE_MIN) / STEP + 1)); }
+
+  let root, svg, ans;
+  function mount(el) {
+    root = el;
+    el.innerHTML =
+      '<h2>' + TITLE + '</h2>' +
+      '<svg class="gw-svg" id="' + ID + '-svg" viewBox="0 0 800 300"></svg>' +
+      '<div class="gw-bar"><button class="primary" id="' + ID + '-reveal">정답확인</button>' +
+      '<button id="' + ID + '-new">새 문제</button></div>' +
+      '<div class="gw-answer" id="' + ID + '-ans"></div>';
+    svg = el.querySelector('#' + ID + '-svg');
+    ans = el.querySelector('#' + ID + '-ans');
+    el.querySelector('#' + ID + '-reveal').onclick = reveal;
+    el.querySelector('#' + ID + '-new').onclick = newProblem;
+    bindDrag(svg);
+    newProblem();
+  }
+
+  function bindDrag(target) {
+    // TODO: pointerdown에서 드래그 대상 판별, setPointerCapture, pointermove에서 setState(clamp+snap)
+    // 정답 패널이 열려 있으면 움직이는 즉시 닫는다.
+  }
+  function setState(s) {
+    state = Math.max(STATE_MIN, Math.min(STATE_MAX, Math.round(s / STEP) * STEP));
+    ans.classList.remove('open');
+    draw();
+  }
+  function draw() { /* TODO: state만으로 SVG를 다시 그린다 */ }
+  function reveal() {
+    const a = answer(state);
+    ans.innerHTML = '<div class="gw-value">' + a.valueMm.toFixed(2) + ' mm</div><div>' + a.text + '</div>';
+    ans.classList.toggle('open');
+  }
+  function newProblem() { setState(randomState()); }
+
+  window.GaugeWidget = { id: ID, title: TITLE, mount: mount, newProblem: newProblem, reveal: reveal };
+  document.addEventListener('DOMContentLoaded', function () { mount(document.getElementById('gw-root')); });
+})();
+</script>
+</body>
+</html>
