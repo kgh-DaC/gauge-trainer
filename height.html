@@ -22,6 +22,10 @@
           --eng:#9ea9b5; --eng-sh:#0a0d10; --eng-hi:rgba(255,255,255,0.28); } }
   body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, "Malgun Gothic", sans-serif; }
   .gw-svg { width:100%; height:auto; max-width:900px; max-height:max(340px, calc(100vh - 200px)); touch-action:none; user-select:none; -webkit-user-select:none; display:block; outline:none; }
+  .h-row { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-start; }
+  .h-row .gw-svg { flex:660 1 440px; min-width:0; }
+  .h-row .gw-loupe { flex:280 1 220px; max-width:360px; margin:0 auto; cursor:ns-resize; }
+  .h-loupe-ln { stroke:var(--accent); stroke-width:1; stroke-opacity:0.6; stroke-dasharray:3 3; }
   .gw-svg:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
   .gw-bar { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; align-items:center; }
   .gw-help { color:var(--muted); font-size:0.9em; margin:4px 0 8px; }
@@ -94,6 +98,10 @@
   const resU = 2, N = 50, pitchU = 98, LEN = 49, labelEvery = 5;
   let state = 0;          // y: 부척 0점(스크라이버 아래 날) 높이
   let revealed = false;
+  // 고배율 창: 부척 0점으로부터 위로 loupeOff(1/100mm) 지점을 중심으로 LOUPE_SPAN(1/100mm) 구간을 보여 준다(슬라이더는 안 움직임)
+  const LOUPE_SPAN = 500, LOUPE_MIN = -100, LOUPE_MAX = LEN * 100 + 100;
+  const LP = { x: 6, w: 268, top: 26, bot: 586, ix: 118, vW: 72, mL: [40, 58, 76], vL: [40, 62], font: 17, bevel: 0 };
+  let loupeOff = 0;
 
   // ---- 명세 함수: 상태 → 정답 (정수 계산, 표시 단계에서만 소수) ----
   function answer(y) {
@@ -155,7 +163,7 @@
              cap: '확대 창 (본척 숫자 단위 cm, 1칸 = 1mm)', np: { em: 78, font: 12.5 } },
       npOv: { x: 135, top: 525, em: 22, font: 7.2, text: true },   // 베이스 앞면 각인(엠블럼 폭 em)
       help: '왼쪽 전체 그림을 위아래로 끌면 크게, 오른쪽 확대 창을 끌면 미세하게 슬라이더가 움직입니다. ' +
-            '키보드: ↑↓(0.02mm), PageUp/PageDown(1mm).' },
+            '키보드: ↑↓(0.02mm), PageUp/PageDown(1mm). 맨 오른쪽 고배율 창은 슬라이더를 움직이지 않고 보는 위치만 바꿉니다.' },
     narrow: { narrow: true, vbW: 400, vbH: 430,
       ov: { tx: 0, ty: 18, s: 0.66, F: 1.6 },
       mag: { x: 164, w: 232, top: 26, bot: 422, ix: 248, vW: 66, mL: [10, 17, 26], vL: [14, 24], font: 13, bevel: 6, capY: 16,
@@ -168,23 +176,28 @@
 
   function kM() { return (L.mag.bot - L.mag.top) / MAG_SPAN; }
 
-  let root, svg, dyn, ans, help;
+  let root, svg, dyn, ans, help, lsvg, ldyn;
   function mount(el) {
     root = el;
     el.innerHTML =
       '<h2 class="gw-title" style="margin:0 0 4px">' + TITLE + '</h2>' +
       '<div class="gw-bar" style="margin:4px 0"><span class="gw-tag">부척 1/50 (0.02mm)</span></div>' +
       '<div class="gw-help" id="' + ID + '-help"></div>' +
+      '<div class="h-row">' +
       '<svg class="gw-svg" id="' + ID + '-svg" viewBox="0 0 660 600" tabindex="0" role="img" aria-label="하이트게이지 눈금"></svg>' +
+      '<svg class="gw-svg gw-loupe" id="' + ID + '-loupe" viewBox="0 0 280 600" tabindex="0" role="img" aria-label="일치선 찾기용 고배율 확대창"></svg>' +
+      '</div>' +
       '<div class="gw-bar"><button class="primary" id="' + ID + '-reveal">정답확인</button>' +
       '<button id="' + ID + '-new">새 문제</button></div>' +
       '<div class="gw-answer" id="' + ID + '-ans" aria-live="polite"></div>';
     svg = el.querySelector('#' + ID + '-svg');
     ans = el.querySelector('#' + ID + '-ans');
     help = el.querySelector('#' + ID + '-help');
+    lsvg = el.querySelector('#' + ID + '-loupe');
     el.querySelector('#' + ID + '-reveal').onclick = reveal;
     el.querySelector('#' + ID + '-new').onclick = newProblem;
     bindDrag(svg);
+    bindLoupe(lsvg);
     applyLayout(true);
     // 컨테이너 폭이 바뀌면(회전, 노션 임베드 크기 변경, 탭 전환) 배치를 다시 고른다
     if (window.ResizeObserver) new ResizeObserver(function () { applyLayout(); }).observe(el);
@@ -243,6 +256,38 @@
     });
   }
 
+  function setLoupe(v) {
+    loupeOff = Math.max(LOUPE_MIN, Math.min(LOUPE_MAX, v));
+    draw();
+  }
+  function bindLoupe(target) {
+    let drag = null;
+    const k = function () { return (LP.bot - LP.top) / LOUPE_SPAN; };   // px per 1/100mm
+    function pt(e) {
+      const p = target.createSVGPoint(); p.x = e.clientX; p.y = e.clientY;
+      return p.matrixTransform(target.getScreenCTM().inverse());
+    }
+    target.addEventListener('pointerdown', function (e) {
+      drag = { id: e.pointerId, y0: pt(e).y, v0: loupeOff };
+      try { target.setPointerCapture(e.pointerId); } catch (err) { /* 무시 */ }
+      e.preventDefault();
+    });
+    target.addEventListener('pointermove', function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      setLoupe(drag.v0 + (pt(e).y - drag.y0) / k());        // 눈금을 잡고 끄는 느낌: 위로 끌면 눈금이 올라가 아래쪽이 보임
+    });
+    function end(e) { if (drag && e.pointerId === drag.id) drag = null; }
+    target.addEventListener('pointerup', end);
+    target.addEventListener('pointercancel', end);
+    target.addEventListener('wheel', function (e) { setLoupe(loupeOff - Math.sign(e.deltaY) * 100); e.preventDefault(); }, { passive: false });
+    target.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowUp') setLoupe(loupeOff + 20); else if (e.key === 'ArrowDown') setLoupe(loupeOff - 20);
+      else if (e.key === 'PageUp') setLoupe(loupeOff + 200); else if (e.key === 'PageDown') setLoupe(loupeOff - 200);
+      else return;
+      e.preventDefault();
+    });
+  }
+
   function setState(s) {
     const ns = Math.max(STATE_MIN, Math.min(STATE_MAX, Math.round(s / resU) * resU));
     const changed = ns !== state;
@@ -290,6 +335,7 @@
       // 주물 표면 알갱이 질감
       '<pattern id="' + ID + '-grain" patternUnits="userSpaceOnUse" width="5" height="5">' +
         '<circle cx="1" cy="1.2" r="0.45" class="h-grain"/><circle cx="3.6" cy="3.4" r="0.4" class="h-grain"/></pattern>' +
+      '<clipPath id="' + ID + '-clipL"><rect x="' + LP.x + '" y="' + LP.top + '" width="' + LP.w + '" height="' + (LP.bot - LP.top) + '"/></clipPath>' +
       '<clipPath id="' + ID + '-clipM"><rect x="' + M_.x + '" y="' + M_.top + '" width="' + M_.w + '" height="' + (M_.bot - M_.top) + '"/></clipPath>' +
       // 학교 엠블럼만 잘라 쓰는 심볼(원본 312×312 중 위쪽 엠블럼 부분)
       '<symbol id="' + ID + '-emb" viewBox="78 0 156 175" overflow="hidden">' +
@@ -316,6 +362,8 @@
   function buildStatic() {
     svg.innerHTML = '<defs>' + staticDefs() + '</defs><g id="' + ID + '-dyn"></g>';
     dyn = svg.querySelector('#' + ID + '-dyn');
+    lsvg.innerHTML = '<g id="' + ID + '-ldyn"></g>';
+    ldyn = lsvg.querySelector('#' + ID + '-ldyn');
   }
 
   // 학교 각인(엠블럼 + 문구, 흰 명판 없음): 금속 몸체에 새긴 것처럼 각인 필터를 건다
@@ -396,9 +444,12 @@
       // 부척판 옆 그림자 홈
       s += ln(o.ix + o.vW + 1.5, Math.max(bt, toY(y + LEN * 100 + 150)), o.ix + o.vW + 1.5, Math.min(bb, toY(y - 150)), 'h-shade');
       // 학교 각인: 부척판 오른쪽 슬라이더 몸체(눈금을 가리지 않음), 슬라이더와 함께 움직임
-      const np = o.np, h0 = engravingV(0, 0, np.em, np.font).h;
+      const np = o.np;
+      if (!np) { /* 고배율 창: 각인 생략 */ } else {
+      const h0 = engravingV(0, 0, np.em, np.font).h;
       const cy = toY(y + LEN * 50);
       if (cy + h0 / 2 < yFloor - 2) s += engravingV(rx, cy - h0 / 2, np.em, np.font).s;
+      }
     }
     // 부척판
     const vt = toY(y + LEN * 100 + 150), vb = Math.min(toY(y - 150), yFloor);
@@ -542,6 +593,21 @@
     s += '</g>';
     s += rc(M_.x, M_.top, M_.w, M_.bot - M_.top, 'h-panel', ' style="fill:none"');
 
+    // 확대 창 안에 고배율 창이 보는 구간 표시
+    const lc = y + loupeOff, lLo = lc - LOUPE_SPAN / 2, lHi = lc + LOUPE_SPAN / 2;
+    s += rc(M_.x, toYM(lHi), M_.ix + M_.vW + 20 - M_.x, toYM(lLo) - toYM(lHi), 'h-ind', ' style="pointer-events:none"');
+
+    // ---------- 고배율 창 ----------
+    const kl = (LP.bot - LP.top) / LOUPE_SPAN;
+    const toYL = function (u) { return LP.bot - (u - lLo) * kl; };
+    let t = tx(LP.x, 16, '고배율 (위아래로 끌어 위치 이동)', 'start', 12, 'h-cap');
+    t += rc(LP.x, LP.top, LP.w, LP.bot - LP.top, 'h-panel');
+    t += '<g clip-path="url(#' + ID + '-clipL)">';
+    t += scales({ toY: toYL, loU: lLo, hiU: lHi, top: LP.top, bot: LP.bot, left: LP.x, right: LP.x + LP.w, ix: LP.ix,
+                  mL: LP.mL, vL: LP.vL, vW: LP.vW, font: LP.font, bevel: LP.bevel, np: null });
+    t += '</g>';
+    t += rc(LP.x, LP.top, LP.w, LP.bot - LP.top, 'h-panel', ' style="fill:none"');
+    ldyn.innerHTML = t;
     dyn.innerHTML = s;
   }
 
@@ -567,12 +633,13 @@
   function newProblem() {
     closeAnswer();
     state = randomState();
+    loupeOff = 0;
     draw();
   }
 
   window.GaugeWidget = { id: ID, title: TITLE, mount: mount, newProblem: newProblem, reveal: reveal,
                          _answer: answer, _randomState: randomState,
-                         _setState: setState, _getState: function () { return state; },
+                         _setState: setState, _setLoupe: setLoupe, _getLoupe: function () { return loupeOff; }, _getState: function () { return state; },
                          _layout: function () { return L; },
                          _forceLayout: function (n) { forcedNarrow = n; applyLayout(true); } };
   document.addEventListener('DOMContentLoaded', function () {
