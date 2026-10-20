@@ -89,6 +89,31 @@ jobs:
           name: gauge-trainer-android-${{ env.APP_VERSION_NAME }}
           path: out/*
 
+      # 로그인 없이 받을 수 있는 "고정 링크"를 최신 APK로 바꿔 둔다.
+      # 링크: https://github.com/<레포>/releases/download/test-latest/gauge-trainer-debug.apk
+      # (정식 Release와 헷갈리지 않게 '시험판(Pre-release)'으로 표시된다)
+      - name: 테스트용 고정 링크(test-latest) 갱신
+        if: github.event_name != 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=test-latest
+          # 태그를 이번 빌드 커밋으로 옮긴다
+          git tag -f "$TAG" "$GITHUB_SHA"
+          git push -f origin "refs/tags/$TAG"
+          NOTES="테스트용 최신 APK (자동 갱신)
+          - 빌드 시각: $(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M') (한국)
+          - 브랜치: ${GITHUB_REF_NAME} / 커밋: ${GITHUB_SHA::7} / 버전: ${APP_VERSION_NAME}
+          휴대폰에서 아래 gauge-trainer-debug.apk 를 눌러 내려받아 설치하세요."
+          # 처음이면 시험판 Release를 만들고, 있으면 설명만 바꾼다
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --prerelease --title "테스트용 최신 APK" --notes "$NOTES"
+          else
+            gh release create "$TAG" --prerelease --latest=false --title "테스트용 최신 APK" --notes "$NOTES"
+          fi
+          # 같은 이름 파일을 덮어써서 링크 주소가 바뀌지 않게 한다
+          gh release upload "$TAG" out/gauge-trainer-debug.apk --clobber
+
       - name: Release 페이지에 결과 파일 붙이기
         if: github.event_name == 'release'
         env:

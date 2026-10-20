@@ -34,6 +34,16 @@ APK(휴대폰 설치 파일) / AAB(플레이스토어 업로드 파일)
 
 ## 3. 테스트용 APK 받아서 휴대폰에 설치하기 (플레이스토어 없이)
 
+### 가장 쉬운 방법: 고정 링크 (로그인 필요 없음)
+
+👉 **https://github.com/kgh-DaC/gauge-trainer/releases/download/test-latest/gauge-trainer-debug.apk**
+
+- 휴대폰 크롬에서 열면 바로 APK가 내려받아집니다. 눌러서 설치하세요.
+- 앱을 고쳐서 푸시할 때마다 **같은 주소의 파일이 최신으로 바뀝니다.** QR코드로 만들어 두면 계속 쓸 수 있습니다.
+- 깃허브 Releases 목록에 "테스트용 최신 APK"(Pre-release)로 보이며, 빌드 시각·커밋이 적혀 있습니다.
+
+### 다른 방법: Actions 실행 기록에서 받기 (깃허브 로그인 필요)
+
 1. 깃허브 레포 → **Actions** 탭 → 왼쪽 **Android 앱 빌드** → 맨 위(가장 최근) 실행 기록 클릭
 2. 페이지 맨 아래 **Artifacts**의 `gauge-trainer-android-…` 를 눌러 zip 내려받기
 3. zip 안의 `gauge-trainer-debug.apk` 를 휴대폰으로 옮기기(카카오톡 나에게 보내기, 구글 드라이브 등)
