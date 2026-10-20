@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      앱 기본 모양: 제목줄 없는 밝은 테마.
+      밝은 테마를 쓰면 웹 페이지도 밝은 화면으로 보인다(계측기 그림이 흰 배경 기준으로 만들어져 있음).
+    -->
+    <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:statusBarColor">@android:color/white</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  앱 아이콘 그림(버니어캘리퍼스 모양). 108x108 칸 중 가운데 약 66x66 안에 그려야 잘리지 않는다.
+  - 긴 막대: 본척(어미자)과 눈금
+  - 아래로 내려온 두 턱: 고정 조우와 움직이는 조우
+  - 노란 사각형: 부척(아들자)
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 본척 막대 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M24,38 L84,38 L84,48 L24,48 Z" />
+
+    <!-- 본척 눈금 -->
+    <path
+        android:strokeColor="#1F4E79"
+        android:strokeWidth="1.2"
+        android:pathData="M30,38 L30,43 M36,38 L36,42 M42,38 L42,45 M48,38 L48,42 M54,38 L54,43 M60,38 L60,42 M66,38 L66,45 M72,38 L72,42 M78,38 L78,43" />
+
+    <!-- 고정 조우(왼쪽 턱) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M24,48 L32,48 L32,74 L28,78 L24,74 Z" />
+
+    <!-- 부척(움직이는 부분) -->
+    <path
+        android:fillColor="#FFC000"
+        android:pathData="M50,34 L66,34 L66,52 L50,52 Z" />
+
+    <!-- 움직이는 조우(오른쪽 턱) -->
+    <path
+        android:fillColor="#FFC000"
+        android:pathData="M50,52 L58,52 L58,74 L54,78 L50,74 Z" />
+
+    <!-- 부척 눈금 -->
+    <path
+        android:strokeColor="#1F4E79"
+        android:strokeWidth="1"
+        android:pathData="M53,48 L53,52 M56,49 L56,52 M59,48 L59,52 M62,49 L62,52 M65,48 L65,52" />
+</vector>
