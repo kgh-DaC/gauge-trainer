@@ -1,0 +1,96 @@
+# 안드로이드 앱 자동 빌드
+# - 위젯(html)이나 android 폴더가 바뀌어 푸시되면, 깃허브 서버가 자동으로 APK를 만든다.
+#   → Actions 탭의 실행 기록 맨 아래 "Artifacts"에서 내려받을 수 있다.
+# - 깃허브에서 Release를 발행하면, 그 Release 페이지에 APK(와 서명 키가 있으면 플레이스토어용 AAB)를 붙여 준다.
+# - 서명 키(Secrets)가 없으면 테스트 설치용 "debug APK"만 만든다.
+name: Android 앱 빌드
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths:
+      - "*.html"
+      - "android/**"
+      - ".claude/skills/gauge-trainer/scripts/build.js"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:          # Actions 탭에서 "Run workflow" 버튼으로 직접 실행
+  release:
+    types: [published]        # Release를 발행하면 실행
+
+permissions:
+  contents: write             # Release에 파일을 붙이기 위해 필요
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # 서명 키가 등록되어 있는지 여부 (Settings → Secrets and variables → Actions)
+      HAS_KEY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - name: 레포 내려받기
+        uses: actions/checkout@v4
+
+      - name: 자바 17 준비
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Gradle 준비
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: 통합 페이지(index.html) 최신으로 다시 만들기
+        run: node .claude/skills/gauge-trainer/scripts/build.js
+
+      - name: 버전 정하기
+        run: |
+          # versionCode: 빌드 번호(실행할 때마다 1씩 커짐)
+          echo "APP_VERSION_CODE=${{ github.run_number }}" >> "$GITHUB_ENV"
+          # versionName: Release 태그(v1.2.0 → 1.2.0), 아니면 1.0.빌드번호
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+            echo "APP_VERSION_NAME=${TAG#v}" >> "$GITHUB_ENV"
+          else
+            echo "APP_VERSION_NAME=1.0.${{ github.run_number }}" >> "$GITHUB_ENV"
+          fi
+
+      - name: 서명 키 풀기
+        if: env.HAS_KEY == 'true'
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
+
+      - name: 테스트용 APK 만들기 (debug)
+        working-directory: android
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: 플레이스토어용 AAB·APK 만들기 (release, 서명)
+        if: env.HAS_KEY == 'true'
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon assembleRelease bundleRelease
+
+      - name: 결과 파일 이름 정리
+        run: |
+          mkdir -p out
+          cp android/app/build/outputs/apk/debug/app-debug.apk out/gauge-trainer-debug.apk
+          if [ "$HAS_KEY" = "true" ]; then
+            cp android/app/build/outputs/apk/release/app-release.apk out/gauge-trainer.apk
+            cp android/app/build/outputs/bundle/release/app-release.aab out/gauge-trainer.aab
+          fi
+          ls -l out
+
+      - name: Actions 실행 기록에 결과 파일 올리기
+        uses: actions/upload-artifact@v4
+        with:
+          name: gauge-trainer-android-${{ env.APP_VERSION_NAME }}
+          path: out/*
+
+      - name: Release 페이지에 결과 파일 붙이기
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" out/* --clobber

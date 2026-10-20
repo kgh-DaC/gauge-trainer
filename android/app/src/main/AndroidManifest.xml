@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  앱 설명서(매니페스트): 앱 이름, 아이콘, 처음 열리는 화면을 안드로이드에 알려준다.
+  - 인터넷 권한이 없다: 계측기 화면이 앱 안에 들어 있어서 오프라인에서도 동작한다.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:theme="@style/AppTheme">
+
+        <!--
+          MainActivity: 앱을 누르면 열리는 화면.
+          configChanges: 화면을 가로/세로로 돌려도 화면을 새로 만들지 않는다
+                         (돌릴 때마다 문제가 바뀌거나 처음으로 돌아가는 것을 막음).
+        -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
