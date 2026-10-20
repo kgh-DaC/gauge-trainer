@@ -15,6 +15,9 @@
 | 다이얼게이지 | 0.01mm | [dial.html](https://kgh-dac.github.io/gauge-trainer/dial.html) |
 | 하이트게이지 | 0.02mm | [height.html](https://kgh-dac.github.io/gauge-trainer/height.html) |
 
+### 📱 안드로이드 앱
+인터넷 없이 쓰는 안드로이드 앱으로도 만들 수 있습니다. 설치 파일 받기·플레이스토어 올리기는 [docs/ANDROID.md](docs/ANDROID.md)를 보세요.
+
 ## 사용 방법
 1. 위쪽 탭에서 계측기를 선택합니다.
 2. 슬라이더·심블·바늘을 드래그하거나 버튼/키보드로 움직여 눈금을 읽습니다.
@@ -42,3 +45,4 @@
 - `index.html` — 5종 통합 페이지(탭형)
 - `vernier.html`, `outside-mic.html`, `inside-mic.html`, `dial.html`, `height.html` — 계측기별 단독 페이지(노션 임베드용)
 - 모든 페이지는 외부 라이브러리 없는 단일 HTML(SVG + JS)입니다.
+- `android/` — `index.html`을 담은 안드로이드 앱(WebView). 깃허브 Actions가 APK/AAB를 자동으로 빌드합니다.
