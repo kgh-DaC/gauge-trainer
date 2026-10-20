@@ -41,6 +41,9 @@ APK(휴대폰 설치 파일) / AAB(플레이스토어 업로드 파일)
 - 휴대폰 크롬에서 열면 바로 APK가 내려받아집니다. 눌러서 설치하세요.
 - 앱을 고쳐서 푸시할 때마다 **같은 주소의 파일이 최신으로 바뀝니다.** QR코드로 만들어 두면 계속 쓸 수 있습니다.
 - 깃허브 Releases 목록에 "테스트용 최신 APK"(Pre-release)로 보이며, 빌드 시각·커밋이 적혀 있습니다.
+- QR코드: [`qr-test-apk-card.png`](qr-test-apk-card.png)(인쇄용 안내 카드), [`qr-test-apk.png`](qr-test-apk.png)(QR만)
+
+![테스트용 APK QR코드](qr-test-apk.png)
 
 ### 다른 방법: Actions 실행 기록에서 받기 (깃허브 로그인 필요)
 
